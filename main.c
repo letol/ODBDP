@@ -29,8 +29,8 @@ void letturamat(int **m, FILE *fin, int r, int c);
 void calculateOF(Sol *temp, Instances *in);
 int check(Sol *temp, Instances *in);
 int check1(Sol *temp, Instances *in);
-int check2(Sol *temp, Instances *in); //TODO
-int check3(Sol *temp, Instances *in); //TODO
+int check2(Sol *temp, Instances *in);
+int check3(Sol *temp, Instances *in);
 Sol solGen(Sol *temp, Instances *in); //TODO
 
 int main(int argc, char* argv[])
@@ -178,36 +178,49 @@ void calculateOF(Sol *temp, Instances *in)
     temp->gain = (gain-cost);
 }
 
+//int check(Sol *temp, Instances *in)
+//// Returns 1 if temp is feasible, 0 otherwise.
+//{
+//    int c, q;
+//    int con2=0;
+//
+//    //Constraint (2)
+//    for(q=0; q<in->Q; q++)
+//    {
+//        con2=0;
+//        for(c=0; c<in->C; c++)
+//        {
+//            con2+=temp->Xcq[c][q];
+//        }
+//        if(con2>1)
+//        {
+//            return 0;
+//        }
+//    }
+//
+//    //Constraint (3)
+//    if(temp->mem > in->M)
+//    {
+//        return 0;
+//    }
+//    return 1;
+//}
+
 int check(Sol *temp, Instances *in)
 // Returns 1 if temp is feasible, 0 otherwise.
 {
-    int c, q;
-    int con2=0;
-
-    //Constraint (2)
-    for(q=0; q<in->Q; q++)
-    {
-        con2=0;
-        for(c=0; c<in->C; c++)
-        {
-            con2+=temp->Xcq[c][q];
-        }
-        if(con2>1)
-        {
-            return 0;
-        }
-    }
-
-    //Constraint (3)
-    if(temp->mem > in->M)
-    {
+    if (check1(temp,in) > 0 ||
+        check2(temp,in) > 0 ||
+        check3(temp,in) >0) {
+        return 1;
+    } else {
         return 0;
     }
-    return 1;
 }
 
 int check1(Sol *temp, Instances *in)
 // check constraint 1
+// returns the number of indexes that should be present and are not, scaled by a factor.
 {
     int c, q, i;
     int p1=0;
@@ -218,7 +231,7 @@ int check1(Sol *temp, Instances *in)
             if (temp->Xcq[c][q] == 1) {
                 for (i=0; i<in->I; i++) {
                     if (in->Eci[c][i] == 1 && temp->Zi == 0) {
-                        pi++;
+                        p1++;
                     }
                 }
             }
@@ -231,6 +244,38 @@ int check1(Sol *temp, Instances *in)
 
 int check2(Sol *temp, Instances *in)
 // check constraint 2
+// returns 0 if every query has at most one configuration associated, otherwise it returns a value grater then 0, scaled by a factor.
 {
+    int q, c;
+    int p2, p2max=0;
+    //TODO: aggiungere fattore di scalamento
 
+    for(q=0; q<in->Q; q++)
+    {
+        p2=0;
+        for(c=0; c<in->C; c++)
+        {
+            p2+=temp->Xcq[c][q];
+        }
+        if(p2>p2max)
+        {
+            p2max=p2;
+        }
+    }
+
+    return p2max - 1;
+}
+
+int check3(Sol *temp, Instances *in)
+// check constraint 3
+// returns 0 if limit M is not exceeded, otherwise it returns the excess amount, scaled by a factor.
+{
+    //TODO: aggiungere fattore di scalamento
+
+    if(temp->mem > in->M)
+    {
+        return temp->mem - in->M;
+    }
+
+    return 0;
 }

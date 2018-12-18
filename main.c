@@ -16,6 +16,7 @@ typedef struct instances{
 
 typedef struct sol{
     int **Xcq;
+    //TODO: int *Yc; //Dobbiamo aggiungerlo?
     int *Zi;
     int mem;
     int gain;
@@ -27,6 +28,10 @@ void letturavet(int *v, FILE *fin, int r);
 void letturamat(int **m, FILE *fin, int r, int c);
 void calculateOF(Sol *temp, Instances *in);
 int check(Sol *temp, Instances *in);
+int check1(Sol *temp, Instances *in);
+int check2(Sol *temp, Instances *in); //TODO
+int check3(Sol *temp, Instances *in); //TODO
+Sol solGen(Sol *temp, Instances *in); //TODO
 
 int main(int argc, char* argv[])
 {
@@ -178,11 +183,7 @@ int check(Sol *temp, Instances *in)
 {
     int c, q;
     int con2=0;
-    //Constraint (3)
-    if(temp->mem > in->M)
-    {
-        return 0;
-    }
+
     //Constraint (2)
     for(q=0; q<in->Q; q++)
     {
@@ -196,5 +197,39 @@ int check(Sol *temp, Instances *in)
             return 0;
         }
     }
+
+    //Constraint (3)
+    if(temp->mem > in->M)
+    {
+        return 0;
+    }
     return 1;
+}
+
+int check1(Sol *temp, Instances *in)
+// check constraint 1
+{
+    int c, q, i;
+    int p1=0;
+
+    for (c=0; c<in->C; c++) {
+        for (q=0; q<in->Q; q++) {
+            if (temp->Xcq[c][q] == 1) {
+                for (i=0; i<in->I; i++) {
+                    if (in->Eci[c][i] == 1 && temp->Zi == 0) {
+                        pi++;
+                    }
+                }
+            }
+        }
+
+    }
+
+    return p1;
+}
+
+int check2(Sol *temp, Instances *in)
+// check constraint 2
+{
+
 }

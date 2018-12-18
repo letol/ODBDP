@@ -211,8 +211,9 @@ int check1(Sol *temp, Instances *in)
 {
     int c, q, i;
     int p1=0;
+    //TODO: aggiungere fattore di scalamento
 
-    for (c=0; c<in->C; c++) {
+    for (c=0; c<in->C; c++) {                                       //TODO: eventualmente da riscrivere usando Yc
         for (q=0; q<in->Q; q++) {
             if (temp->Xcq[c][q] == 1) {
                 for (i=0; i<in->I; i++) {

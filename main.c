@@ -29,21 +29,27 @@ void letturavet(int *v, FILE *fin, int r);
 void letturamat(int **m, FILE *fin, int r, int c);
 void calculateOF(Sol *temp, Instances *in);
 int check(Sol *temp, Instances *in);
-int check1(Sol *temp, Instances *in);
-int check2(Sol *temp, Instances *in);
-int check3(Sol *temp, Instances *in);
-void GAinit(Sol *pop, Instances *in);
-void createZi(Sol* temp, Instances *in);
+//int check1(Sol *temp, Instances *in);
+//int check2(Sol *temp, Instances *in);
+//int check3(Sol *temp, Instances *in);
+void GAinit(Sol *pop, Sol* newpop, Instances *in);
+void createZi(Sol *temp, Instances *in);
+void avoidC2(Sol *temp, Instances *in);
+void searchMax(Sol *pop, Sol *best, Instances *in);
+void cpySol(Sol *best, Sol *temp, Instances *in);
+void crossoverC(Sol *p1, Sol *p2, Sol *son1, Sol *son2, Instances *in);
+void crossoverR(Sol *p1, Sol *p2, Sol *son1, Sol *son2, Instances *in);
+void changePop(Sol *pop1, Sol *pop2, Instances *in);
 
 int main(int argc, char* argv[])
 {
-    int j, c, q, i;
+    int j, c, q, i, flag=0, iteration=0;
     Instances in;
     Sol best, temp;
     FILE *fin, *fout;
     time_t start=time(NULL);
     int timelimit=0;
-    Sol population[numP];
+    Sol population[numP], newpop[numP];
 
     assert(argc == 4);
 
@@ -57,7 +63,8 @@ int main(int argc, char* argv[])
 
     initialization(fin, &in, &best, &temp);
 
-    GAinit(population, &in);
+    GAinit(population, newpop, &in);
+/*
     for(j=0; j<numP; j++)
     {
         for(c=0; c<in.C; c++)
@@ -83,15 +90,69 @@ int main(int argc, char* argv[])
         printf("\n\n");
     }
     printf("\n");
+*/
+    best.gain=0;
 
-/*
+    searchMax(population, &best, &in);
 
     while ((time(NULL) - start)<=timelimit){
 
-    }
+        for(j=0; j<numP; j+=2)
+        {
+            flag=rand()%2;
+            if(flag==0)
+            {
+                crossoverC(&population[j], &population[j+1], &newpop[j], &newpop[j+1], &in);
 
+                createZi(&newpop[j], &in);
+                createZi(&newpop[j+1], &in);
+
+                calculateOF(&newpop[j], &in);
+                calculateOF(&newpop[j+1], &in);
+
+                newpop[j].feasible=check(&newpop[j], &in);
+                newpop[j+1].feasible=check(&newpop[j+1], &in);
+            }
+            else
+            {
+                crossoverR(&population[j], &population[j+1], &newpop[j], &newpop[j+1], &in);
+
+                createZi(&newpop[j], &in);
+                createZi(&newpop[j+1], &in);
+
+                calculateOF(&newpop[j], &in);
+                calculateOF(&newpop[j+1], &in);
+
+                newpop[j].feasible=check(&newpop[j], &in);
+                newpop[j+1].feasible=check(&newpop[j+1], &in);
+            }
+
+        }
+
+        changePop(population, newpop, &in);
+        searchMax(population, &best, &in);
+        iteration++;
+    }
+    /*
         while(clock()<30000){}
     */
+    printf("Best solution is:\n");
+    for(c=0; c<in.C; c++)
+    {
+        for(q=0; q<in.Q; q++)
+        {
+            printf("%d ", best.Xcq[c][q]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+    for(i=0; i<in.I; i++)
+    {
+        printf("%d ", best.Zi[i]);
+    }
+
+    printf("\ngain: %d\nmemory: %d\nfeasible: %d", best.gain, best.mem, best.feasible);
+    printf("\n\nIteration: %d", iteration);
 
     //TODO: Ricordiamoci delle free
 
@@ -212,7 +273,6 @@ void calculateOF(Sol *temp, Instances *in)
     return;
 }
 
-/*
 int check(Sol *temp, Instances *in)
 // Returns 1 if temp is feasible, 0 otherwise.
 {
@@ -240,8 +300,264 @@ int check(Sol *temp, Instances *in)
     }
     return 1;
 }
-*/
 
+void GAinit(Sol* pop, Sol* newpop, Instances *in)
+{
+    int c=0, q=0, j=0;
+
+    for(j=0; j<numP; j++)
+    {
+        assert( (pop[j].Xcq = malloc(in->C*sizeof(int*))) != NULL);
+
+        for(c=0; c<in->C; c++)
+        {
+            assert( (pop[j].Xcq[c]=malloc(in->Q*sizeof(int))) !=NULL  );
+        }
+
+        assert( (pop[j].Zi = malloc(in->I*sizeof(int))) !=NULL );
+
+        assert( (newpop[j].Xcq = malloc(in->C*sizeof(int*))) != NULL);
+
+        for(c=0; c<in->C; c++)
+        {
+            assert( (newpop[j].Xcq[c]=malloc(in->Q*sizeof(int))) !=NULL  );
+        }
+
+        assert( (newpop[j].Zi = malloc(in->I*sizeof(int))) !=NULL );
+    }
+    for(j=0; j<numP; j++)
+    {
+        for(c=0; c<in->C; c++)
+        {
+            for(q=0; q<in->Q; q++)
+            {
+                if(in->Gcq[c][q]!=0)
+                {
+                    pop[j].Xcq[c][q]=rand()%2;
+                }
+                else
+                {
+                    pop[j].Xcq[c][q]=0;
+                }
+            }
+        }
+/*
+        for(q=0; q<in->Q; q++)
+        {
+            c=rand()%(in->C);
+            for(c=rand()%(in->C), x=0; pop[j].Xcq[c][q]==0 && x<50; c=rand()%(in->C), x++);
+
+            if (pop[j].Xcq[c][q] == 1)
+            {
+                for(k=0; k<in->C; k++)
+                {
+                    if(k!=c)
+                    {
+                        pop[j].Xcq[k][q]=0;
+                    }
+                }
+            }
+        }
+*/
+        avoidC2(&pop[j], in);
+        createZi(&pop[j], in);
+        calculateOF(&pop[j], in);
+        pop[j].feasible=check(&pop[j], in);
+    }
+
+    return;
+}
+
+
+void createZi(Sol* temp, Instances *in)
+{
+    int i, c, q;
+
+
+    for(i=0; i<in->I; i++)
+    {
+        temp->Zi[i]=0;
+    }
+
+    for(c=0; c<in->C; c++)
+    {
+        for(q=0; q<in->Q; q++)
+        {
+            for(i=0; i<in->I; i++)
+            {
+                if(temp->Xcq[c][q]==1 && in->Eci[c][i]==1)
+                {
+                    temp->Zi[i]=1;
+                }
+            }
+        }
+    }
+    return;
+}
+
+void avoidC2(Sol *temp, Instances *in)
+{
+    int c,q,x,k;
+
+    for(q=0; q<in->Q; q++)
+    {
+        c=rand()%(in->C);
+        for(c=rand()%(in->C), x=0; temp->Xcq[c][q]==0 && x<50; c=rand()%(in->C), x++);
+
+        if (temp->Xcq[c][q] == 1)
+        {
+            for(k=0; k<in->C; k++)
+            {
+                if(k!=c)
+                {
+                    temp->Xcq[k][q]=0;
+                }
+            }
+        }
+    }
+}
+
+void searchMax(Sol *pop, Sol *best, Instances *in)
+{
+    int i;
+    for(i=0; i<numP; i++)
+    {
+        if(best->gain <= pop[i].gain && pop[i].feasible==1)
+        {
+            cpySol(best, &pop[i], in);
+        }
+    }
+}
+
+void cpySol(Sol *best, Sol *temp, Instances *in)
+{
+    int i, j;
+    for(i=0; i<in->C; i++)
+    {
+        for(j=0; j<in->Q; j++)
+        {
+            best->Xcq[i][j]=temp->Xcq[i][j];
+        }
+    }
+
+    for(i=0; i<in->I; i++)
+    {
+        best->Zi[i]=temp->Zi[i];
+    }
+    best->gain=temp->gain;
+    best->mem=temp->mem;
+    best->feasible=temp->feasible;
+}
+
+void crossoverC(Sol *p1, Sol *p2, Sol *son1, Sol *son2, Instances *in)
+{
+    int x,y;
+    int c,q;
+    x=rand()%in->Q;
+    y=rand()%in->Q;
+
+    for(q=0; q<in->Q; q++)
+    {
+        if(x>=y)
+        {
+            if(q>=x && q<=y)
+            {
+                for(c=0;c<in->C;c++)
+                {
+                    son1->Xcq[c][q]=p2->Xcq[c][q];
+                    son2->Xcq[c][q]=p1->Xcq[c][q];
+                }
+            }
+            else
+            {
+                for(c=0;c<in->C;c++)
+                {
+                    son1->Xcq[c][q]=p1->Xcq[c][q];
+                    son2->Xcq[c][q]=p2->Xcq[c][q];
+                }
+            }
+        }
+        else
+        {
+            if(q>=y && q<=x)
+            {
+                for(c=0;c<in->C;c++)
+                {
+                    son1->Xcq[c][q]=p2->Xcq[c][q];
+                    son2->Xcq[c][q]=p1->Xcq[c][q];
+                }
+            }
+            else
+            {
+                for(c=0;c<in->C;c++)
+                {
+                    son1->Xcq[c][q]=p1->Xcq[c][q];
+                    son2->Xcq[c][q]=p2->Xcq[c][q];
+                }
+            }
+        }
+    }
+}
+
+void crossoverR(Sol *p1, Sol *p2, Sol *son1, Sol *son2, Instances *in)
+{
+    int x,y;
+    int c,q;
+    x=rand()%in->Q;
+    y=rand()%in->Q;
+
+    for(c=0; c<in->C; c++)
+    {
+        if(x>=y)
+        {
+            if(c>=x && c<=y)
+            {
+                for(q=0;q<in->Q;q++)
+                {
+                    son1->Xcq[c][q]=p2->Xcq[c][q];
+                    son2->Xcq[c][q]=p1->Xcq[c][q];
+                }
+            }
+            else
+            {
+                for(q=0;q<in->Q;q++)
+                {
+                    son1->Xcq[c][q]=p1->Xcq[c][q];
+                    son2->Xcq[c][q]=p2->Xcq[c][q];
+                }
+            }
+        }
+        else
+        {
+            if(c>=x && c<=y)
+            {
+                for(q=0;q<in->Q;q++)
+                {
+                    son1->Xcq[c][q]=p2->Xcq[c][q];
+                    son2->Xcq[c][q]=p1->Xcq[c][q];
+                }
+            }
+            else
+            {
+                for(q=0;q<in->Q;q++)
+                {
+                    son1->Xcq[c][q]=p1->Xcq[c][q];
+                    son2->Xcq[c][q]=p2->Xcq[c][q];
+                }
+            }
+        }
+    }
+}
+
+void changePop(Sol *pop1, Sol *pop2, Instances *in)
+{
+    int i;
+    for(i=0;i<numP;i++)
+    {
+        cpySol(&pop1[i], &pop2[i], in);
+    }
+}
+/*
 int check(Sol *temp, Instances *in)
 // Returns 1 if temp is feasible, 0 otherwise.
 {
@@ -315,100 +631,4 @@ int check3(Sol *temp, Instances *in)
 
     return 0;
 }
-
-void GAinit(Sol* pop, Instances *in)
-{
-    int i=0, c=0, q=0, j=0, k=0, x=0;
-
-    for(j=0; j<numP; j++)
-    {
-        assert( (pop[j].Xcq = malloc(in->C*sizeof(int*))) != NULL);
-
-        for(c=0; c<in->C; c++)
-        {
-            assert( (pop[j].Xcq[c]=malloc(in->Q*sizeof(int))) !=NULL  );
-        }
-
-        assert( (pop[j].Zi = malloc(in->I*sizeof(int))) !=NULL );
-    }
-
-    for(j=0; j<numP; j++)
-    {
-        for(c=0; c<in->C; c++)
-        {
-            for(q=0; q<in->Q; q++)
-            {
-                if(in->Gcq[c][q]!=0)
-                {
-                    pop[j].Xcq[c][q]=rand()%2;
-                }
-                else
-                {
-                    pop[j].Xcq[c][q]=0;
-                }
-            }
-        }
-    }
-
-    for(j=0; j<numP; j++)
-    {
-        for(q=0; q<in->Q; q++)
-        {
-            c=rand()%(in->C);
-            for(c=rand()%(in->C), x=0; pop[j].Xcq[c][q]==0 && x<50; c=rand()%(in->C), x++);
-
-            if (pop[j].Xcq[c][q] == 1)
-            {
-                for(k=0; k<in->C; k++)
-                {
-                    if(k!=c)
-                    {
-                        pop[j].Xcq[k][q]=0;
-                    }
-                }
-            }
-        }
-    }
-
-    for(j=0; j<numP; j++)
-    {
-        createZi(&pop[j], in);
-        calculateOF(&pop[j], in);
-        pop[j].feasible=check(&pop[j], in);
-    }
-
-
-
-    return;
-}
-
-
-void createZi(Sol* temp, Instances *in)
-{
-    int i, c, q;
-
-    for(c=0; c<in->C; c++)
-    {
-        for(q=0; q<in->Q; q++)
-        {
-            for(i=0; i<in->I; i++)
-            {
-                temp->Zi[i]=0;
-            }
-        }
-    }
-    for(c=0; c<in->C; c++)
-    {
-        for(q=0; q<in->Q; q++)
-        {
-            for(i=0; i<in->I; i++)
-            {
-                if(temp->Xcq[c][q]==1 && in->Eci[c][i]==1)
-                {
-                    temp->Zi[i]=1;
-                }
-            }
-        }
-    }
-    return;
-}
+*/

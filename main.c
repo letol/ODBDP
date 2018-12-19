@@ -20,7 +20,7 @@ typedef struct sol{
     int *Zi;
     int mem;
     int gain;
-
+    int feasible;
 }Sol;
 
 void initialization(FILE *fin, Instances *in, Sol *best, Sol *temp);
@@ -31,7 +31,7 @@ int check(Sol *temp, Instances *in);
 int check1(Sol *temp, Instances *in);
 int check2(Sol *temp, Instances *in);
 int check3(Sol *temp, Instances *in);
-Sol solGen(Sol *temp, Instances *in); //TODO
+void createZi(Sol* temp, Instances *in);
 
 int main(int argc, char* argv[])
 {
@@ -127,8 +127,6 @@ void initialization(FILE *fin, Instances *in, Sol *best, Sol *temp)
 
     letturamat(in->Gcq, fin, in->C, in->Q);
 
-
-
     return;
 }
 
@@ -159,12 +157,13 @@ void letturamat(int **m, FILE *fin,int r, int c)
 
 void calculateOF(Sol *temp, Instances *in)
 {
-    int i, j, gain=0, cost=0;
+    int c, q, i, gain=0, cost=0;
+    temp->mem=0;
 
-    for (i=0; i<in->C; i++) {
-        for (j=0; j<in->Q; j++) {
-            if (temp->Xcq[i][j] == 1) {
-                gain += in->Gcq[i][j];
+    for (c=0; c<in->C; c++) {
+        for (q=0; q<in->Q; q++) {
+            if (temp->Xcq[c][q] == 1) {
+                gain += in->Gcq[c][q];
             }
         }
     }
@@ -172,10 +171,13 @@ void calculateOF(Sol *temp, Instances *in)
     for (i=0; i<in->I; i++) {
         if (temp->Zi[i] == 1) {
             cost += in->Fi[i];
+            temp->mem+=in->Mi[i];
         }
     }
 
     temp->gain = (gain-cost);
+
+    return;
 }
 
 //int check(Sol *temp, Instances *in)
@@ -211,7 +213,7 @@ int check(Sol *temp, Instances *in)
 {
     if (check1(temp,in) > 0 ||
         check2(temp,in) > 0 ||
-        check3(temp,in) >0) {
+        check3(temp,in) > 0) {
         return 1;
     } else {
         return 0;
@@ -278,4 +280,34 @@ int check3(Sol *temp, Instances *in)
     }
 
     return 0;
+}
+
+void createZi(Sol* temp, Instances *in)
+{
+    int i, c, q;
+
+    for(c=0; c<in->C; c++)
+    {
+        for(q=0; q<in->Q; q++)
+        {
+            for(i=0; i<in->I; i++)
+            {
+                temp->Zi[i]=0;
+            }
+        }
+    }
+    for(c=0; c<in->C; c++)
+    {
+        for(q=0; q<in->Q; q++)
+        {
+            for(i=0; i<in->I; i++)
+            {
+                if(temp->Xcq[c][q]==1 && in->Eci[c][i]==1)
+                {
+                    temp->Zi[i]=1;
+                }
+            }
+        }
+    }
+    return;
 }

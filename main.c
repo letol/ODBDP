@@ -6,6 +6,7 @@
 
 #define true 1
 #define false 0
+#define numN 10
 
 typedef struct instances{
     int Q, I, C, M;
@@ -23,23 +24,39 @@ typedef struct sol{
     int feasible;
 }Sol;
 
-void initialization(FILE *fin, Instances *in, Sol *best, Sol *temp);
+typedef struct vett{
+    int *vettX;
+    float *vettR;
+    float fitness;
+    int mem;
+    int gain;
+    int *Zi;
+    int feasible;
+}Vett;
+
+void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop);
 void letturavet(int *v, FILE *fin, int r);
 void letturamat(int **m, FILE *fin, int r, int c);
-void calculateOF(Sol *temp, Instances *in);
-int check(Sol *temp, Instances *in);
-int check1(Sol *temp, Instances *in);
-int check2(Sol *temp, Instances *in);
-int check3(Sol *temp, Instances *in);
-void createZi(Sol* temp, Instances *in);
+void calculateOF(Vett *v, Instances *in);
+int relax3(Vett *v, Instances *in);
+void TSinit(Vett *pop, Instances *in);
+void createZi(Vett *v, Instances *in);
+void searchMax(Vett *pop, Sol *best, Instances *in);
+void crossover(Sol *p1, Sol *p2, Sol *son1, Sol *son2, Instances *in);
+void calculateR(Vett *v, Instances *in);
+void calculateFitness(Vett *v, Instances *in);
+void Vett2Sol(Vett *v, Sol *s, Instances *in);
+void averageGain(int *av,Instances *in);
 
 int main(int argc, char* argv[])
 {
+    int c, q, i, iteration=0;
     Instances in;
-    Sol best, temp;
+    Sol best;
     FILE *fin, *fout;
     time_t start=time(NULL);
     int timelimit=0;
+    Vett temp;
 
     assert(argc == 4);
 
@@ -53,20 +70,53 @@ int main(int argc, char* argv[])
 
     initialization(fin, &in, &best, &temp);
 
+    TSinit(&temp, &in);
 
-    while ((time(NULL) - start)<timelimit){
+    for(q=0; q<in.Q; q++)
+    {
+        printf("%d ", temp.vettX[q]);
+    }
+    printf("\nvettore zi:\n ");
+    for(i=0; i<in.I; i++)
+    {
+        printf("%d ", temp.Zi[i]);
+    }
+    printf("\ngain: %d\nmemory: %d\nfeasible:%d \n", temp.gain, temp.mem, temp.feasible);
+
+    Vett2Sol(&temp, &best, &in);
+
+    while ((time(NULL) - start)<=timelimit)
+    {
 
     }
     /*
         while(clock()<30000){}
     */
 
+    printf("Best solution is:\n");
+    for(c=0; c<in.C; c++)
+    {
+        for(q=0; q<in.Q; q++)
+        {
+            printf("%d ", best.Xcq[c][q]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+    for(i=0; i<in.I; i++)
+    {
+        printf("%d ", best.Zi[i]);
+    }
+
+    printf("\ngain: %d\nmemory: %d\nfeasible: %d", best.gain, best.mem, best.feasible);
+    printf("\n\nIteration: %d", iteration);
+
     //TODO: Ricordiamoci delle free
 
     return 0;
 }
 
-void initialization(FILE *fin, Instances *in, Sol *best, Sol *temp)
+void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop)
 {
     char lecture[40];
     int c=0;
@@ -102,15 +152,6 @@ void initialization(FILE *fin, Instances *in, Sol *best, Sol *temp)
 
     assert( (best->Zi = malloc(in->I*sizeof(int))) !=NULL );
 
-    assert( (temp->Xcq = malloc(in->C*sizeof(int*))) != NULL);
-
-    for(c=0; c<in->C; c++)
-    {
-        assert( (temp->Xcq[c]=malloc(in->Q*sizeof(int))) !=NULL  );
-    }
-
-    assert( (temp->Zi = malloc(in->I*sizeof(int))) !=NULL );
-
     assert( (fscanf(fin, "%s", lecture)) != EOF );
 
     letturamat(in->Eci, fin, in->C, in->I);
@@ -127,7 +168,9 @@ void initialization(FILE *fin, Instances *in, Sol *best, Sol *temp)
 
     letturamat(in->Gcq, fin, in->C, in->Q);
 
-    return;
+    assert( (pop->vettX = malloc(in->Q*sizeof(int))) != NULL);
+    assert( (pop->vettR = malloc(in->Q*sizeof(float))) != NULL);
+    assert( (pop->Zi = malloc(in->Q*sizeof(int))) != NULL);
 }
 
 void letturavet(int *v, FILE *fin, int r)
@@ -136,9 +179,8 @@ void letturavet(int *v, FILE *fin, int r)
 
     for(i=0; i<r; i++)
     {
-       assert(fscanf(fin,"%d", &v[i]) != EOF);
+        assert(fscanf(fin,"%d", &v[i]) != EOF);
     }
-    return;
 }
 
 void letturamat(int **m, FILE *fin,int r, int c)
@@ -152,162 +194,243 @@ void letturamat(int **m, FILE *fin,int r, int c)
             assert(fscanf(fin,"%d", &m[i][j]) != EOF);
         }
     }
-    return;
 }
 
-void calculateOF(Sol *temp, Instances *in)
+void calculateOF(Vett *v, Instances *in)
 {
-    int c, q, i, gain=0, cost=0;
-    temp->mem=0;
+    int q, i, gain=0, cost=0;
+    v->mem=0;
 
-    for (c=0; c<in->C; c++) {
-        for (q=0; q<in->Q; q++) {
-            if (temp->Xcq[c][q] == 1) {
-                gain += in->Gcq[c][q];
-            }
+    for (q=0; q<in->Q; q++) {
+        if (v->vettX[q] != -1) {
+            gain += in->Gcq[v->vettX[q]][q];
         }
     }
 
     for (i=0; i<in->I; i++) {
-        if (temp->Zi[i] == 1) {
+        if (v->Zi[i] == 1) {
             cost += in->Fi[i];
-            temp->mem+=in->Mi[i];
+            v->mem+=in->Mi[i];
         }
     }
 
-    temp->gain = (gain-cost);
-
-    return;
+    v->gain = (gain-cost);
 }
 
-//int check(Sol *temp, Instances *in)
-//// Returns 1 if temp is feasible, 0 otherwise.
-//{
-//    int c, q;
-//    int con2=0;
-//
-//    //Constraint (2)
-//    for(q=0; q<in->Q; q++)
-//    {
-//        con2=0;
-//        for(c=0; c<in->C; c++)
-//        {
-//            con2+=temp->Xcq[c][q];
-//        }
-//        if(con2>1)
-//        {
-//            return 0;
-//        }
-//    }
-//
-//    //Constraint (3)
-//    if(temp->mem > in->M)
-//    {
-//        return 0;
-//    }
-//    return 1;
-//}
-
-int check(Sol *temp, Instances *in)
-// Returns 1 if temp is feasible, 0 otherwise.
+void TSinit(Vett *pop, Instances *in)
 {
-    if (check1(temp,in) > 0 ||
-        check2(temp,in) > 0 ||
-        check3(temp,in) > 0) {
-        return 1;
-    } else {
-        return 0;
-    }
-}
+    int k=0,c=0, q=0;
+    int todoN=0;
+    int av=0;
+    pop->feasible=-1;
+    pop->gain=-1;
 
-int check1(Sol *temp, Instances *in)
-// check constraint 1
-// returns the number of indexes that should be present and are not, scaled by a factor.
-{
-    int c, q, i;
-    int p1=0;
-    //TODO: aggiungere fattore di scalamento
+    averageGain(&av, in);
+    while(pop->feasible==0 || pop->gain <=0)
+    {
+        pop->feasible=-1;
+        pop->gain=-1;
 
-    for (c=0; c<in->C; c++) {                                       //TODO: eventualmente da riscrivere usando Yc
-        for (q=0; q<in->Q; q++) {
-            if (temp->Xcq[c][q] == 1) {
-                for (i=0; i<in->I; i++) {
-                    if (in->Eci[c][i] == 1 && temp->Zi == 0) {
-                        p1++;
+        todoN=0;
+        for(q=0; q<in->Q; q++)
+        {
+            pop->vettX[q]=-1;
+        }
+
+        for(q=rand()%in->Q; todoN<in->Q;)
+        {
+            if(pop->vettX[q]==-1)
+            {
+                c=rand()%in->C;
+
+                if(in->Gcq[c][q] >= av)
+                {
+
+                    for(k=0; k<in->Q; k++)
+                    {
+                        if(in->Gcq[c][k] >= av && pop->vettX[k]==-1)
+                        {
+                            pop->vettX[k] = c;
+                            todoN++;
+                        }
                     }
+                    q=rand()%in->Q;
                 }
             }
+            else
+            {
+                q=rand()%in->Q;
+            }
+
         }
 
+        createZi(pop, in);
+        calculateOF(pop, in);
+        relax3(pop, in);
     }
 
-    return p1;
+    calculateR(pop, in);
+    calculateFitness(pop, in);
+
+    return;
+
 }
 
-int check2(Sol *temp, Instances *in)
-// check constraint 2
-// returns 0 if every query has at most one configuration associated, otherwise it returns a value grater then 0, scaled by a factor.
+
+void searchMax(Vett *pop, Sol *best, Instances *in)
 {
-    int q, c;
-    int p2, p2max=0;
-    //TODO: aggiungere fattore di scalamento
+    int i;
+    for(i=0; i<numN; i++)
+    {
+        if(best->gain < pop[i].gain && pop[i].feasible==1)
+        {
+            Vett2Sol(&pop[i], best, in);
+        }
+    }
+}
+
+void crossoverC(Sol *p1, Sol *p2, Sol *son1, Sol *son2, Instances *in)
+{
+    int x,y;
+    int c,q;
+    x=rand()%in->Q;
+    y=rand()%in->Q;
 
     for(q=0; q<in->Q; q++)
     {
-        p2=0;
-        for(c=0; c<in->C; c++)
+        if(x>=y)
         {
-            p2+=temp->Xcq[c][q];
+            if(q>=x && q<=y)
+            {
+                for(c=0;c<in->C;c++)
+                {
+                    son1->Xcq[c][q]=p2->Xcq[c][q];
+                    son2->Xcq[c][q]=p1->Xcq[c][q];
+                }
+            }
+            else
+            {
+                for(c=0;c<in->C;c++)
+                {
+                    son1->Xcq[c][q]=p1->Xcq[c][q];
+                    son2->Xcq[c][q]=p2->Xcq[c][q];
+                }
+            }
         }
-        if(p2>p2max)
+        else
         {
-            p2max=p2;
+            if(q>=y && q<=x)
+            {
+                for(c=0;c<in->C;c++)
+                {
+                    son1->Xcq[c][q]=p2->Xcq[c][q];
+                    son2->Xcq[c][q]=p1->Xcq[c][q];
+                }
+            }
+            else
+            {
+                for(c=0;c<in->C;c++)
+                {
+                    son1->Xcq[c][q]=p1->Xcq[c][q];
+                    son2->Xcq[c][q]=p2->Xcq[c][q];
+                }
+            }
         }
     }
-
-    return p2max - 1;
 }
 
-int check3(Sol *temp, Instances *in)
-// check constraint 3
+int relax3(Vett *v, Instances *in)
+// relaxation of constraint 3
 // returns 0 if limit M is not exceeded, otherwise it returns the excess amount, scaled by a factor.
 {
     //TODO: aggiungere fattore di scalamento
 
-    if(temp->mem > in->M)
+    if(v->mem > in->M)
     {
-        return temp->mem - in->M;
+        v->feasible=0;
+        return v->mem - in->M;
     }
-
+    v->feasible=1;
     return 0;
 }
 
-void createZi(Sol* temp, Instances *in)
+void calculateR(Vett *v, Instances *in)
+// Calculates vettR from vettX
 {
-    int i, c, q;
+    int q, i;
+    int sum;
 
-    for(c=0; c<in->C; c++)
+    for(q=0; q<in->Q; q++)
     {
-        for(q=0; q<in->Q; q++)
+        for(i=0, sum=0; i<in->I; i++)
         {
-            for(i=0; i<in->I; i++)
+            if(in->Eci[v->vettX[q]][i] == 1)
             {
-                temp->Zi[i]=0;
+                sum += in->Mi[i] + in->Fi[i];
+            }
+        }
+        v->vettR[q] =(float) in->Gcq[v->vettX[q]][q] / sum;
+    }
+}
+
+void calculateFitness(Vett *v, Instances *in)
+{
+    v->fitness = v->gain - relax3(v, in);
+}
+
+void Vett2Sol(Vett *v, Sol *s, Instances *in)
+// Translate type Vett into type Sol solution
+{
+    int c, q;
+    for(c=0; c<in->C; c++){
+        for(q=0; q<in->Q; q++) {
+            if(c == v->vettX[q]) {
+                s->Xcq[c][q] = 1;
+            } else {
+                s->Xcq[c][q] = 0;
             }
         }
     }
-    for(c=0; c<in->C; c++)
+    s->Zi = v->Zi;
+    s->gain = v->gain;
+    s->mem = v->mem;
+    s->feasible = v->feasible;
+}
+
+void createZi(Vett *v, Instances *in)
+{
+    int i, q;
+
+    for(i=0; i<in->I; i++)
     {
-        for(q=0; q<in->Q; q++)
+        v->Zi[i]=0;
+    }
+
+
+    for(q=0; q<in->Q; q++)
+    {
+        for(i=0; i<in->I; i++)
         {
-            for(i=0; i<in->I; i++)
+            if(in->Eci[v->vettX[q]][i]==1)
             {
-                if(temp->Xcq[c][q]==1 && in->Eci[c][i]==1)
-                {
-                    temp->Zi[i]=1;
-                }
+                v->Zi[i]=1;
             }
         }
     }
+}
+
+void averageGain(int *av,Instances *in)
+{
+    int c,q;
+    for(c=0;c<in->C;c++)
+    {
+        for(q=0;q<in->Q;q++)
+        {
+            *av+=in->Gcq[c][q];
+        }
+    }
+    *av= *av/(in->C*in->Q);
+
     return;
+
 }

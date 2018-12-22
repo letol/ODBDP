@@ -43,6 +43,7 @@ void crossover(Sol *p1, Sol *p2, Sol *son1, Sol *son2, Instances *in);
 void calculateR(Vett *v, Instances *in);
 void calculateFitness(Vett *v, Instances *in);
 void Vett2Sol(Vett *v, Sol *s, Instances *in);
+void averageGain(int *av,Instances *in);
 
 int main(int argc, char* argv[])
 {
@@ -226,7 +227,9 @@ void GAinit(Vett *pop, Instances *in)
 {
     int j=0, k=0,c=0, q=0;
     int todoN;
+    int av=0;
 
+    averageGain(&av, in);
 
     for(j=0; j<numP; j++)
     {
@@ -252,14 +255,14 @@ void GAinit(Vett *pop, Instances *in)
                 {
                     c=rand()%in->C;
 
-                    if(in->Gcq[c][q] > 0)
+                    if(in->Gcq[c][q] >= av)
                     {
                         //temp->Xcq[c][q] = 1;
                         //q++;
 
                         for(k=0; k<in->Q; k++)
                         {
-                            if(in->Gcq[c][k] > 0 && pop[j].vettX[k]==-1)
+                            if(in->Gcq[c][k] >= av && pop[j].vettX[k]==-1)
                             {
                                 pop[j].vettX[k] = c;
                                 todoN++;
@@ -423,4 +426,20 @@ void createZi(Vett *v, Instances *in)
             }
         }
     }
+}
+
+void averageGain(int *av,Instances *in)
+{
+    int c,q;
+    for(c=0;c<in->C;c++)
+    {
+        for(q=0;q<in->Q;q++)
+        {
+            *av+=in->Gcq[c][q];
+        }
+    }
+    *av= *av/(in->C*in->Q);
+
+    return;
+
 }

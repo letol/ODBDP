@@ -3,9 +3,11 @@
 #include <assert.h>
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 
-#define numP 12
+#define numP 500
 #define debug 1
+
 
 typedef struct instances{
     int Q, I, C, M;
@@ -381,10 +383,11 @@ void calculateOF(Vett *v, Instances *in)
 void GAinit(Vett *pop, Instances *in)
 // Genetic Algorithm initialization
 {
-    int j=0, k=0,c=0, q=0;
-    int todoN;
+    int j=0, i=0,c=0, q=0;
+    int count, Memory, numconf;
+    int *confmem;
     //int av=0;
-
+    assert(confmem=malloc(in->C*sizeof(int)));
     //averageGain(&av, in);
 
     for(j=0; j<numP; j++)
@@ -394,58 +397,87 @@ void GAinit(Vett *pop, Instances *in)
 
         while(pop[j].feasible==0 || pop[j].gain <=0)
         {
-            pop[j].feasible=-1;
-            pop[j].gain=-1;
-            //while(pop[j].feasible==0 || pop[j].gain <=0)
-            //{
-
-            todoN=0;
-            for(q=0; q<in->Q; q++)
+            count=0;
+            Memory=in->M;
+            numconf=0;
+            for(c=0; c<in->C; c++)
+            {
+                confmem[c]=0;
+                for(i=0; i<in->I; i++)
+                {
+                    if(in->Eci[c][i]==1)
+                    {
+                        confmem[c]+=in->Mi[i];
+                    }
+                }
+            }
+            for(q=0; q<in->Q;q++)
             {
                 pop[j].vettX[q]=-1;
             }
 
-            for(q=rand()%in->Q; todoN<in->Q;)
+            createZi(&pop[j], in);
+
+            for(c=rand()%in->C; count<(in->C/5); count++, c=rand()%in->C)
             {
-                if(pop[j].vettX[q]==-1)
+                if( (Memory-confmem[c]) > 0)
                 {
-                    c=rand()%in->C;
-
-                    if(in->Gcq[c][q] >= 0)
+                    numconf++;
+                    for(q=0;q<in->Q;q++)
                     {
-                        //temp->Xcq[c][q] = 1;
-                        //q++;
-
-                        for(k=0; k<in->Q; k++)
+                        if((pop[j].vettX[q]) == -1 && (in->Gcq[c][q]) > 0 )
                         {
-                            if(in->Gcq[c][k] >= 0 && pop[j].vettX[k]==-1)
+                            pop[j].vettX[q]=c;
+                        }
+                        else if( (pop[j].vettX[q]) > -1)
+                        {
+                            if(in->Gcq[c][q] > in->Gcq[pop[j].vettX[q]][q])
                             {
-                                if( (rand()%2) == 1) {
-                                    pop[j].vettX[k] = c;
-                                    todoN++;
-                                }
+                                pop[j].vettX[q]=c;
                             }
                         }
-                        q=rand()%in->Q;
                     }
-                }
-                else
-                {
-                    q=rand()%in->Q;
-                }
 
+                    Memory-=confmem[c];
+                    createZi(&pop[j], in);
+                    changeConfMem(confmem, &pop[j], in);
+                    calculateOF(&pop[j], in);
+                    relax3(&pop[j], in);
+                }
             }
-
-            createZi(&pop[j], in);
-            calculateOF(&pop[j], in);
-            relax3(&pop[j], in);
         }
-        //}
-        calculateR(&pop[j], in);
-        calculateFitness(&pop[j], in);
+        printf("configuzioni usate %d\n", numconf);
     }
 }
 
+void changeConfMem(int *confmem, Vett *x, Instances *in)
+{
+    int i, j;
+
+    for(j=0; j<in->C; j++)
+    {
+        confmem[j]=0;
+        for(i=0; i<in->I; i++)
+        {
+            if(in->Eci[j][i]==1)
+            {
+                confmem[j]+=in->Mi[i];
+            }
+        }
+    }
+
+    for(i=0; i<in->I; i++)
+    {
+        for(j=0; j<in->C; j++)
+        {
+            if(in->Eci[j][i] == 1 && x->Zi[i]==1)
+            {
+                confmem[j]-=in->Mi[i];
+            }
+        }
+    }
+    return;
+}
 
 void searchMax(Vett *pop, Sol *best, Instances *in)
 // Scan population for best solution
@@ -539,7 +571,6 @@ void Vett2Sol(Vett *v, Sol *s, Instances *in)
 }
 
 void createZi(Vett *v, Instances *in)
-// Create Zi vector from vettX in solution v
 {
     int i, q;
 
@@ -548,19 +579,22 @@ void createZi(Vett *v, Instances *in)
         v->Zi[i]=0;
     }
 
-
     for(q=0; q<in->Q; q++)
     {
-        if(v->vettX[q] != -1) {
-            for (i = 0; i < in->I; i++) {
-                if (in->Eci[v->vettX[q]][i] == 1) {
-                    v->Zi[i] = 1;
+        if(v->vettX[q]>=0)
+        {
+            for(i=0; i<in->I; i++)
+            {
+                if(in->Eci[v->vettX[q]][i]==1)
+                {
+                    v->Zi[i]=1;
                 }
             }
         }
     }
-}
 
+    return;
+}
 /*
 void averageGain(int *av,Instances *in)
 {

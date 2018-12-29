@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
     Vett population[numP];
     Vett selectedParents[numP/2], children[numP/2];
 
-#if !debug
+#if debug == 0
     srand((unsigned int)time(NULL)); //per aumentare casualità quando non siamo in debug
 #endif
 
@@ -83,7 +83,7 @@ int main(int argc, char* argv[])
 
     GAinit(population, &in);
 
-#if debug
+#if debug >= 2
     printf("INITIAL POPULATION\n\n");
     for(j=0; j<numP; j++)
     {
@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
     while ((time(NULL) - start)<=timelimit)
     {
         selectParents(population, selectedParents, &in);
-#if debug
+#if debug >= 1
         printf("\nSELECTED PARENTS\n");
         for(j=0; j<numP/2; j++) {
             if (selectedParents[j].feasible != -2) {
@@ -138,7 +138,7 @@ int main(int argc, char* argv[])
         }
 #endif
 
-#if debug
+#if debug >= 1
         printf("\nCROSSOVER & MUTATION\n");
 #endif
         for (i=0; i<numP/2; i++) {
@@ -176,7 +176,7 @@ int main(int argc, char* argv[])
             i++;
         }
 
-#if debug
+#if debug >= 1
         printf("\nPRODUCED CHILDREN\n");
         for(j=0; j<numP/2; j++) {
             if (children[j].feasible != -2) {
@@ -202,13 +202,13 @@ int main(int argc, char* argv[])
 
         //If no crossover happened, apply mutation over population
         if(Xcount == 0) {
-#if debug
+#if debug >= 1
             printf("\nNO CROSSOVER -> ONLY MUTATION\n");
 #endif
             for(i=0; i<numP; i++) {
                 mutation(&population[i], &in);
             }
-#if debug
+#if debug >= 2
             for(j=0; j<numP; j++)
             {
                 printf("\n");
@@ -234,7 +234,7 @@ int main(int argc, char* argv[])
 
         searchMax(population, &best, &in);
 
-#if debug
+#if debug >= 1
         printf("\nCurrent Best solution stats:\n");
 
         printf("\ngain: %d\nmemory: %d\nfeasible: %d", best.gain, best.mem, best.feasible);
@@ -447,7 +447,9 @@ void GAinit(Vett *pop, Instances *in)
                 }
             }
         }
+#if debug >= 1
         printf("configuzioni usate %d\n", numconf);
+#endif
     }
 }
 

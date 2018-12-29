@@ -5,7 +5,7 @@
 #include <time.h>
 #include <limits.h>
 
-#define numP 500
+#define numP 1000
 #define debug 1
 
 
@@ -51,6 +51,7 @@ void Vett2Sol(Vett *v, Sol *s, Instances *in);
 void invertion(Vett *v, Instances *in);
 void mutation(Vett *v, Instances *in);
 void cpySol(Vett *dst, Vett *src, Instances *in);
+void changeConfMem(int *confmem, Vett *x, Instances *in);
 //void averageGain(int *av,Instances *in);
 
 int main(int argc, char* argv[])
@@ -710,27 +711,84 @@ void invertion(Vett *v, Instances *in)
 //    }
 //}
 
-void mutation(Vett *v, Instances *in)
-// Mutation of genes based on 1/r probability
-{
-    int q;
-    double sumInvR=0, prob, val;
-
-    for (q=0; q<in->Q; q++) {
-        sumInvR += 1/v->vettR[q];
+void mutation(Vett *v, Instances *in) {
+    int i, q, c = 0;
+    float compatibility = 0;
+    int qMin = -1;
+    float rMin = INT_MAX;
+    int count = 0;
+    int divisore;
+    int tabu[in->Q];
+    float maxCompatibility = 0;
+    int cMax = -1;
+    int flag = 0;
+    float soglia = 0.15;
+    for (int var = 0; var < in->Q; ++var) {
+        tabu[var] = 0;
     }
+    while (1) {
+        rMin = INT_MAX;
+        qMin = -1;
+        c = 0;
+        compatibility = 0;
 
-    for (q=0; q<in->Q; q++) {
-        prob = ((1/v->vettR[q])/sumInvR);
-        val =(double) rand()/RAND_MAX;
-        if (val < prob) {
-            if (v->vettX[q] == -1) {
-                v->vettX[q] = 0;
-            } else if (v->vettX[q] == in->C-1) {
-                v->vettX[q] = -1;
-            } else {
-                v->vettX[q] += 1;
+        for (q = 0; q < in->Q; q++) {
+            if (((v->vettR[q] != 0) ^ flag) && v->vettR[q] < rMin
+                && tabu[q] != 1) {
+                qMin = q;
+                rMin = v->vettR[q];
+                //break;
             }
+        }
+        if (qMin == -1) {
+            if (flag == 1)
+                break;
+            flag = 1;
+        } else {
+            //printf("qmin %d %d\n",v->vettX[qMin], qMin);
+            tabu[qMin] = 1;
+            cMax = -1;
+            maxCompatibility = 0;
+            while (c < in->C) {
+
+                if (in->Gcq[c][qMin] > 0) {
+
+                    divisore = 0;
+                    compatibility = 0;
+                    for (i = 0; i < in->I; i++) {
+                        if (v->Zi[i] == 1) {
+                            divisore++;
+                            if (in->Eci[c][i] == v->Zi[i]) {
+                                compatibility += 1;
+                            }
+                        }
+                    }
+                    compatibility /= divisore;
+                    if (compatibility > maxCompatibility) {
+                        maxCompatibility = compatibility;
+                        cMax = c;
+
+                    }
+                }
+                c++;
+            }
+            //printf("max %f\n", maxCompatibility);
+            if (flag == 1) {
+                //printf("max %f\n", maxCompatibility);
+                soglia = 0.21;
+            }
+            if (maxCompatibility > soglia) {
+
+                v->vettX[qMin] = cMax;
+            }
+            if (maxCompatibility < soglia) {
+                v->vettX[qMin] = -1;
+
+            }
+            createZi(v, in);
+            calculateOF(v, in);
+            calculateR(v, in);
+            relax3(v, in);
         }
     }
 }

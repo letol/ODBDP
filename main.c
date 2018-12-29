@@ -615,21 +615,21 @@ void averageGain(int *av,Instances *in)
  */
 
 void selectParents(Vett *pop, Vett *selPar, Instances *in)
-// Select parents with 1/fitness based probability
+// Select parents with fitness based probability
 {
     int i;
-    double sumInvFitness=0, prob, val;
+    double sumFitness=0, prob, val;
 
     for (i=0; i<numP/2; i++) {
         selPar[i].feasible = -2;
     }
 
     for (i=0; i<numP; i++) {
-        sumInvFitness += 1/pop[i].fitness;
+        sumFitness += pop[i].fitness;
     }
 
     for (i=0; i<numP/2; i++) {
-        prob = ((1/pop[i].fitness)/sumInvFitness);
+        prob = (pop[i].fitness/sumFitness);
         val =(double) rand()/RAND_MAX;
         if (val < prob) {
             cpySol(&selPar[i], &pop[i], in);
@@ -638,17 +638,17 @@ void selectParents(Vett *pop, Vett *selPar, Instances *in)
 }
 
 void sobstitute(Vett *pop, Vett *children, Instances *in)
-// Substitute parents with fitness based probability
+// Substitute parents with 1/fitness based probability
 {
     int i;
-    double sumFitness=0, prob, val;
+    double sumInvFitness=0, prob, val;
 
     for (i=0; i<numP; i++) {
-        sumFitness += pop[i].fitness;
+        sumInvFitness += 1/pop[i].fitness;
     }
 
     for (i=0; i<numP/2; i++) {
-        prob = (pop[i].fitness/sumFitness);
+        prob = ((1/pop[i].fitness)/sumInvFitness);
         val =(double) rand()/RAND_MAX;
         if (val < prob) {
             cpySol(&pop[i], &children[i], in);

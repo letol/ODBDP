@@ -528,19 +528,25 @@ int relax3(Vett *v, Instances *in)
 }
 
 void calculateR(Vett *v, Instances *in)
-// Calculates vettR from vettX
+// Calculates vettR from vettX - compatibility based: guardo quanti indici attivi ha in comune la configurazione con Zi corrente
 {
     int q, i;
-    int sum;
+    float compatibility;
+    int divisore;
 
-    for(q=0; q<in->Q; q++) {
-        if(v->vettX[q] != -1) {
-            for (i = 0, sum = 0; i < in->I; i++) {
-                if (in->Eci[v->vettX[q]][i] == 1) {
-                    sum += in->Mi[i] + in->Fi[i];
+    for (q = 0; q < in->Q; q++) {
+        if (v->vettX[q] != -1) {
+            compatibility = 0;
+            divisore = 0;
+            for (i = 0; i < in->I; i++) {
+                if (v->Zi[i] == 1) {
+                    divisore++;
+                    if (in->Eci[v->vettX[q]][i] == v->Zi[i]) {
+                        compatibility ++;
+                    }
                 }
             }
-            v->vettR[q] = (float) in->Gcq[v->vettX[q]][q] / sum;
+            v->vettR[q] = (float) compatibility / divisore;
         } else {
             v->vettR[q] = 0;
         }
@@ -691,77 +697,64 @@ void invertion(Vett *v, Instances *in)
     v->vettR[q2] = rTmp;
 }
 
-//void mutation(Vett *v, Instances *in)
-//{
-//    int q, i, sum;
-//    int qMin=0;
-//    float rMin = INT_MAX;
-//
-//    for (q=0; q<in->Q; q++) {
-//        if (v->vettR[q] != 0 && v->vettR[q] < rMin) {
-//            qMin = q;
-//            rMin = v->vettR[q];
-//        }
-//    }
-//
-//    if (v->vettX[qMin] == -1) {
-//        v->vettX[qMin] = 0;
-//    } else if (v->vettX[qMin] == in->C-1) {
-//        v->vettX[qMin] = -1;
-//    } else {
-//        v->vettX[qMin] += 1;
-//    }
-//}
-
-void mutation(Vett *v, Instances *in) {
+void mutation(Vett *v, Instances *in)
+//criticità: una conf non serve tutte le query che potrebbe, bisognerebbe dare una passata alla fine per vedere se c'è qualche query non servita con una sua conf attiva
+//il valore soglia è empirico
+//cambiare la soglia quando flag = 1 seconda la memoria disponibile, in generale credo proprio che la soglia vada in base alla mem
+{
     int i, q, c = 0;
-    float compatibility = 0;
-    int qMin = -1;
-    float rMin = INT_MAX;
-    int count = 0;
-    int divisore;
-    int tabu[in->Q];
-    float maxCompatibility = 0;
-    int cMax = -1;
+    float compatibility, maxCompatibility;
+    int divisore,cMax;
+
+    int qMin;
+    float rMin;
+
     int flag = 0;
-    float soglia = 0.15;
+    float soglia = 0.15; //valore empirico
+
+
+    int tabu[in->Q];
     for (int var = 0; var < in->Q; ++var) {
         tabu[var] = 0;
     }
-    while (1) {
+    while (1) //ne esco dopo aver considerato una e una sola volta tutte le query
+    {
         rMin = INT_MAX;
         qMin = -1;
         c = 0;
         compatibility = 0;
 
         for (q = 0; q < in->Q; q++) {
-            if (((v->vettR[q] != 0) ^ flag) && v->vettR[q] < rMin
-                && tabu[q] != 1) {
+            if (((v->vettR[q] != 0) ^ flag) //voglio occuparmi prima delle query con già una config e poi di quelle senza
+                && v->vettR[q] < rMin  //ricerca minimo
+                //&& v->vettR[q] < soglia //se voglio escludere di cambiare le q con una compatibilità > soglia
+                && tabu[q] != 1) //voglio fare un solo giro di vettX
+            {
                 qMin = q;
                 rMin = v->vettR[q];
-                //break;
             }
         }
-        if (qMin == -1) {
+
+        if (qMin == -1) // mi permette di occuparmi prima delle query già servite da una config e poi delle altre
+        {
             if (flag == 1)
                 break;
             flag = 1;
         } else {
-            //printf("qmin %d %d\n",v->vettX[qMin], qMin);
             tabu[qMin] = 1;
             cMax = -1;
             maxCompatibility = 0;
-            while (c < in->C) {
-
-                if (in->Gcq[c][qMin] > 0) {
-
+            while (c < in->C) //mi guardo tutte le configurazioni che con questa query mi danno gain positivo alla ricerca di quella con compatibilità max
+            {
+                if (in->Gcq[c][qMin] > 0) //calcolo conf con compatibilità max
+                {
                     divisore = 0;
                     compatibility = 0;
                     for (i = 0; i < in->I; i++) {
                         if (v->Zi[i] == 1) {
                             divisore++;
                             if (in->Eci[c][i] == v->Zi[i]) {
-                                compatibility += 1;
+                                compatibility ++;
                             }
                         }
                     }
@@ -769,17 +762,16 @@ void mutation(Vett *v, Instances *in) {
                     if (compatibility > maxCompatibility) {
                         maxCompatibility = compatibility;
                         cMax = c;
-
                     }
                 }
                 c++;
             }
             //printf("max %f\n", maxCompatibility);
-            if (flag == 1) {
-                //printf("max %f\n", maxCompatibility);
+            if (flag == 1) //soglia per le query che non erano ancora servite, più alta per non aggiurne troppe e andare fuori con la memoria (sarebbe bello decidere in base a quanta memoria mi rimane a disp)
+            {
                 soglia = 0.21;
             }
-            if (maxCompatibility > soglia) {
+            if (maxCompatibility >= soglia) {
 
                 v->vettX[qMin] = cMax;
             }

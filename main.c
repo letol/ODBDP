@@ -76,8 +76,6 @@ int main(int argc, char* argv[])
     int worstmem=0;
     int fc=0;
 
-    srand((unsigned int)time(NULL));
-
     assert(argc == 4);
 
     assert(strcmp(argv[2], "-t") == 0);
@@ -103,7 +101,7 @@ int main(int argc, char* argv[])
 
 
     assert( (changed=malloc(in.C*sizeof(int)))!= NULL );
-
+/*
     printf("\navailablemem: %d\n", temp.availableMem);
 
 
@@ -149,7 +147,7 @@ int main(int argc, char* argv[])
     {
         printf("%d ", temp.gainc[c]);
     }
-
+*/
     Vett2Sol(&temp, &best, &in);
 
     for(q=0; q<in.C; q++)
@@ -204,7 +202,7 @@ int main(int argc, char* argv[])
                     bestc=c;
                 }
             }
-            printf(" fea %d %d\n", worst, bestc);
+            //    printf(" fea %d %d\n", worst, bestc);
             temp.Yc[worst]=0;
             temp.Yc[bestc]=1;
             changed[worst]=count;
@@ -250,7 +248,7 @@ int main(int argc, char* argv[])
                 }
                 else if(temp.Yc[c]==0 && changed[c]==0)
                 {
-                    if(worstVal>temp.confmem[c] && changed[c]==0)
+                    if(worstVal>temp.confmem[c])
                     {
                         bestc=c;
                         worstVal=temp.confmem[c];
@@ -261,18 +259,17 @@ int main(int argc, char* argv[])
             temp.Yc[bestc]=1;
             changed[worst]=count;
             changed[bestc]=count;
-            printf(" no fea %d %d\n", worst, bestc);
+            //  printf(" no fea %d %d\n", worst, bestc);
         }
 
-
-
         createVettXfromYc(&temp, &in);
+        createYc(&temp, &in);
         configureC(&temp, &in);
         createZi(&temp, &in);
         calculateOF(&temp, &in);
         check3(&temp, &in);
 
-        if( (iteration%500) == 499)
+        if( (iteration%600) == 599)
         {
             TSinit(&temp, &in);
             iteration=0;
@@ -282,6 +279,12 @@ int main(int argc, char* argv[])
         {
             Vett2Sol(&temp, &best, &in);
             iteration=0;
+            count=0;
+            for(q=0;q<in.C;q++)
+            {
+                changed[q]=0;
+            }
+
         }
         else
         {
@@ -293,7 +296,7 @@ int main(int argc, char* argv[])
             count=0;
         }
 
-        printf("gain: %d feasible: %d\n", temp.gain, temp.feasible);
+        //printf("gain: %d feasible: %d\n", temp.gain, temp.feasible);
 
 
     }

@@ -73,7 +73,8 @@ int main(int argc, char* argv[])
     int worst, worstVal, bestq, bestc;
     int bestVal;
     int *changed;
-    float worstmem=0;
+    int worstmem=0;
+    int fc=0;
 
     srand((unsigned int)time(NULL));
 
@@ -167,7 +168,7 @@ int main(int argc, char* argv[])
         bestq=0;
         bestc=0;
         bestVal=0;
-
+        worstmem=0;
         count++;
 
         for(q=0;q<in.C;q++)
@@ -178,22 +179,32 @@ int main(int argc, char* argv[])
             }
         }
 
-        if(temp.feasible==true)
+        if(temp.feasible==1)
         {
             for(c=0; c<in.C; c++)
             {
-                if( worstVal > (temp.gainc[c]-temp.Fc[c]) && temp.Yc[c]==1 && changed[c]==0)
+                if(temp.Yc[c]==1 && changed[c]==0)
                 {
-                    worst=c;
-                    worstVal=temp.gainc[c]-temp.Fc[c];
+                    for(fc=0,i=0; i<in.I; i++)
+                    {
+                        if(in.Eci[c][i]==1)
+                        {
+                            fc+=in.Fi[i];
+                        }
+                    }
+                    if(worstVal > (temp.gainc[c]-fc))
+                    {
+                        worst=c;
+                        worstVal=temp.gainc[c]-fc;
+                    }
                 }
-                else if(temp.Yc[c]==0 && bestVal < (bestq=evaluateGain(c,&temp,&in)) && changed[c]==0)
+                else if(temp.Yc[c]==0 && bestVal < (bestq=evaluateGain(c,&temp,&in)-temp.Fc[c]) && changed[c]==0)
                 {
                     bestVal=bestq;
                     bestc=c;
                 }
             }
-
+            printf(" fea %d %d\n", worst, bestc);
             temp.Yc[worst]=0;
             temp.Yc[bestc]=1;
             changed[worst]=count;
@@ -201,7 +212,7 @@ int main(int argc, char* argv[])
         }
         else
         {
-
+            /*
             for(i=0; i<in.I; i++)
             {
                 if(bestVal < in.Mi[i] && temp.Zi[i]==1)
@@ -218,13 +229,13 @@ int main(int argc, char* argv[])
                     temp.Yc[c]=0;
                 }
             }
+            */
 
-            /*
             for(c=0; c<in.C; c++)
             {
-                if(temp.Yc[c]==1)
+                if(temp.Yc[c]==1 && changed[c]==0)
                 {
-                    for(i=0; i<in.I; i++)
+                    for(bestVal=0, i=0; i<in.I; i++)
                     {
                         if(in.Eci[c][i]==1)
                         {
@@ -237,9 +248,9 @@ int main(int argc, char* argv[])
                         worst=c;
                     }
                 }
-                else
+                else if(temp.Yc[c]==0 && changed[c]==0)
                 {
-                    if(worstVal>temp.confmem[c])
+                    if(worstVal>temp.confmem[c] && changed[c]==0)
                     {
                         bestc=c;
                         worstVal=temp.confmem[c];
@@ -250,7 +261,7 @@ int main(int argc, char* argv[])
             temp.Yc[bestc]=1;
             changed[worst]=count;
             changed[bestc]=count;
-            */
+            printf(" no fea %d %d\n", worst, bestc);
         }
 
 
@@ -261,7 +272,7 @@ int main(int argc, char* argv[])
         calculateOF(&temp, &in);
         check3(&temp, &in);
 
-        if( (iteration%100) == 99)
+        if( (iteration%500) == 499)
         {
             TSinit(&temp, &in);
             iteration=0;
@@ -408,7 +419,7 @@ void TSinit(Vett *pop, Instances *in)
 //questa inizializzazione permette di avere una soluzione che utilizzi il maggior numero di memoria possibile controllando un certo
 //numero di configurazioni casuali che verranno aggiunte ad una query o sostituite dove il gain risulta maggiore
 {
-    int i, c, q, count; //vettore del costo di una configurazione. Si modifica in base agli indici attualmente attivi tramite la funzione changeConfMem
+    int i, c, q, count;
     int Memory, numconf; //memory tiene il conto della memoria attualmente disponibile e permette di verificare che una configurazione non causi infeasibility
     pop->feasible=-1;
     pop->gain=-1;

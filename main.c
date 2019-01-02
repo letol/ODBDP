@@ -5,8 +5,9 @@
 #include <time.h>
 #include <limits.h>
 
-#define numP 1000
+#define numP 250
 #define debug 1
+#define probOffset .1
 
 
 typedef struct instances{
@@ -26,6 +27,7 @@ typedef struct sol{
 
 typedef struct vett{
     int *vettX;
+    float *vettC;
     float *vettR;
     float fitness;
     int mem;
@@ -45,6 +47,7 @@ void searchMax(Vett *pop, Sol *best, Instances *in);
 void selectParents(Vett *pop, Vett *selPar, Instances *in);
 void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in);
 void sobstitute(Vett *pop, Vett *children, Instances *in);
+void calculateC(Vett *v, Instances *in);
 void calculateR(Vett *v, Instances *in);
 void calculateFitness(Vett *v, Instances *in);
 void Vett2Sol(Vett *v, Sol *s, Instances *in);
@@ -97,6 +100,11 @@ int main(int argc, char* argv[])
         {
             printf("%d ", population[j].Zi[i]);
         }
+        printf("\nvettore c%d\n ", j);
+        for(i=0; i<in.I; i++)
+        {
+            printf("%f ", population[j].vettC[i]);
+        }
         printf("\nvettore r%d\n ", j);
         for(i=0; i<in.I; i++)
         {
@@ -112,6 +120,7 @@ int main(int argc, char* argv[])
 
     for(i=0; i<numP; i++) {
         calculateFitness(&population[i], &in);
+        mutation(&population[i], &in);
     }
 
     while ((time(NULL) - start)<=timelimit)
@@ -129,8 +138,12 @@ int main(int argc, char* argv[])
                 for (i = 0; i < in.I; i++) {
                     printf("%d ", selectedParents[j].Zi[i]);
                 }
+                printf("\nvettore c%d\n ", j);
+                for (i = 0; i < in.Q; i++) {
+                    printf("%f ", selectedParents[j].vettC[i]);
+                }
                 printf("\nvettore r%d\n ", j);
-                for (i = 0; i < in.I; i++) {
+                for (i = 0; i < in.Q; i++) {
                     printf("%f ", selectedParents[j].vettR[i]);
                 }
                 printf("\ngain: %d\nmemory: %d\nfeasible:%d \n", selectedParents[j].gain, selectedParents[j].mem, selectedParents[j].feasible);
@@ -153,13 +166,17 @@ int main(int argc, char* argv[])
                         crossover(&selectedParents[i], &selectedParents[j], &children[i], &children[j], &in);
                         Xcount++;
 
+                        calculateC(&children[i], &in);
                         calculateR(&children[i], &in);
+                        calculateC(&children[j], &in);
                         calculateR(&children[j], &in);
 
                         mutation(&children[i], &in);
                         mutation(&children[j], &in);
 
+                        calculateC(&children[i], &in);
                         calculateR(&children[i], &in);
+                        calculateC(&children[j], &in);
                         calculateR(&children[j], &in);
 
                         createZi(&children[i], &in);
@@ -188,8 +205,12 @@ int main(int argc, char* argv[])
                 for (i = 0; i < in.I; i++) {
                     printf("%d ", children[j].Zi[i]);
                 }
+                printf("\nvettore c%d\n ", j);
+                for (i = 0; i < in.Q; i++) {
+                    printf("%f ", children[j].vettC[i]);
+                }
                 printf("\nvettore r%d\n ", j);
-                for (i = 0; i < in.I; i++) {
+                for (i = 0; i < in.Q; i++) {
                     printf("%f ", children[j].vettR[i]);
                 }
                 printf("\ngain: %d\nmemory: %d\nfeasible:%d \n", children[j].gain, children[j].mem, children[j].feasible);
@@ -221,8 +242,13 @@ int main(int argc, char* argv[])
                 {
                     printf("%d ", population[j].Zi[i]);
                 }
+                printf("\nvettore c%d\n ", j);
+                for(i=0; i<in.Q; i++)
+                {
+                    printf("%f ", population[j].vettC[i]);
+                }
                 printf("\nvettore r%d\n ", j);
-                for(i=0; i<in.I; i++)
+                for(i=0; i<in.Q; i++)
                 {
                     printf("%f ", population[j].vettR[i]);
                 }
@@ -320,6 +346,7 @@ void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop, Vett *select
     for(c=0; c<numP; c++)
     {
         assert( (pop[c].vettX = malloc(in->Q*sizeof(int))) != NULL);
+        assert( (pop[c].vettC = malloc(in->Q*sizeof(float))) != NULL);
         assert( (pop[c].vettR = malloc(in->Q*sizeof(float))) != NULL);
         assert( (pop[c].Zi = malloc(in->I*sizeof(int))) != NULL);
     }
@@ -327,10 +354,12 @@ void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop, Vett *select
     for(c=0; c<numP/2; c++)
     {
         assert((children[c].vettX = malloc(in->Q * sizeof(int))) != NULL);
+        assert((children[c].vettC = malloc(in->Q * sizeof(float))) != NULL);
         assert((children[c].vettR = malloc(in->Q * sizeof(float))) != NULL);
         assert((children[c].Zi = malloc(in->I * sizeof(int))) != NULL);
 
         assert((selectedParents[c].vettX = malloc(in->Q * sizeof(int))) != NULL);
+        assert((selectedParents[c].vettC = malloc(in->Q * sizeof(float))) != NULL);
         assert((selectedParents[c].vettR = malloc(in->Q * sizeof(float))) != NULL);
         assert((selectedParents[c].Zi = malloc(in->I * sizeof(int))) != NULL);
     }
@@ -443,6 +472,8 @@ void GAinit(Vett *pop, Instances *in)
                     createZi(&pop[j], in);
                     changeConfMem(confmem, &pop[j], in);
                     calculateOF(&pop[j], in);
+                    calculateC(&pop[j], in);
+                    calculateR(&pop[j], in);
                     relax3(&pop[j], in);
                 }
             }
@@ -496,19 +527,42 @@ void searchMax(Vett *pop, Sol *best, Instances *in)
 }
 
 void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in)
-// Crossover with 1 random cutting point
+//scorro i due vettori contemporaneamente appena una dei due prevarica l'altro in fatto di gain offerto scelgo quello come punto di taglio
 {
     int q;
-    int x=(rand()%(in->Q-1))+1;
+    int x = (rand() % (in->Q - 1)) + 1;
+    int i = x-1, j = x;
+    float sumR1 = p1->vettR[i], sumR2 = p1->vettR[j];
 
-    for(q=0; q<x; q++) {
+    for(q = 0; q < in->Q; q++) {
+        if (sumR1 != 0 && sumR2 != 0 &&
+        (sumR1 > 2 * sumR2 || sumR2 > 2 * sumR1)) {
+            break;
+        }
+        if (j < in->Q-1 && p1->vettR[j+1] > p2->vettR[j-1]) {
+            j++;
+            sumR1 += p1->vettR[j];
+            sumR2 += p2->vettR[j];
+        } else if (i > 0){
+            i--;
+            sumR1 += p1->vettR[i];
+            sumR2 += p2->vettR[i];
+        }
+    }
+
+    for (q = 0; q < i; q++) {
         c1->vettX[q] = p1->vettX[q];
         c2->vettX[q] = p2->vettX[q];
     }
 
-    for(q=x; q<in->Q; q++) {
+    for (q = i; q < j; q++) {
         c1->vettX[q] = p2->vettX[q];
         c2->vettX[q] = p1->vettX[q];
+    }
+
+    for (q = j; q < in->Q; q++) {
+        c1->vettX[q] = p1->vettX[q];
+        c2->vettX[q] = p2->vettX[q];
     }
 }
 
@@ -527,8 +581,8 @@ int relax3(Vett *v, Instances *in)
     return 0;
 }
 
-void calculateR(Vett *v, Instances *in)
-// Calculates vettR from vettX - compatibility based: guardo quanti indici attivi ha in comune la configurazione con Zi corrente
+void calculateC(Vett *v, Instances *in)
+// Calculates vettC from vettX - compatibility based: guardo quanti indici attivi ha in comune la configurazione con Zi corrente
 {
     int q, i;
     float compatibility;
@@ -546,7 +600,27 @@ void calculateR(Vett *v, Instances *in)
                     }
                 }
             }
-            v->vettR[q] = (float) compatibility / divisore;
+            v->vettC[q] = (float) compatibility / divisore;
+        } else {
+            v->vettC[q] = 0;
+        }
+    }
+}
+
+void calculateR(Vett *v, Instances *in)
+// Calculates vettR from vettX
+{
+    int q, i;
+    int sum;
+
+    for(q=0; q<in->Q; q++) {
+        if(v->vettX[q] != -1) {
+            for (i = 0, sum = 0; i < in->I; i++) {
+                if (in->Eci[v->vettX[q]][i] == 1) {
+                    sum += in->Mi[i] + in->Fi[i];
+                }
+            }
+            v->vettR[q] = (float) in->Gcq[v->vettX[q]][q] / sum;
         } else {
             v->vettR[q] = 0;
         }
@@ -637,7 +711,7 @@ void selectParents(Vett *pop, Vett *selPar, Instances *in)
     }
 
     for (i=0; i<numP/2; i++) {
-        prob = (pop[i].fitness/sumFitness);
+        prob = (pop[i].fitness/sumFitness)+probOffset;
         val =(double) rand()/RAND_MAX;
         if (val < prob) {
             cpySol(&selPar[i], &pop[i], in);
@@ -646,19 +720,19 @@ void selectParents(Vett *pop, Vett *selPar, Instances *in)
 }
 
 void sobstitute(Vett *pop, Vett *children, Instances *in)
-// Substitute parents with 1/fitness based probability
+// Substitute parents with children fitness based probability
 {
     int i;
-    double sumInvFitness=0, prob, val;
+    double sumFitness=0, prob, val;
 
     for (i=0; i<numP; i++) {
-        sumInvFitness += 1/pop[i].fitness;
+        sumFitness += 1/children[i].fitness;
     }
 
     for (i=0; i<numP/2; i++) {
-        prob = ((1/pop[i].fitness)/sumInvFitness);
+        prob = (children[i].fitness/sumFitness)+probOffset;
         val =(double) rand()/RAND_MAX;
-        if (val < prob) {
+        if (val < prob && children[i].feasible != -2) {
             cpySol(&pop[i], &children[i], in);
         }
     }
@@ -674,15 +748,15 @@ void invertion(Vett *v, Instances *in)
     float rTmp;
 
     for(q=0; q<in->Q; q++) {
-        if (v->vettR[q] != 0) {
-            if (v->vettR[q] < r2) {
-                if (v->vettR[q] < r1) {
+        if (v->vettC[q] != 0) {
+            if (v->vettC[q] < r2) {
+                if (v->vettC[q] < r1) {
                     r2 = r1;
                     q2 = q1;
-                    r1 = v->vettR[q];
+                    r1 = v->vettC[q];
                     q1 = q;
                 } else {
-                    r2 = v->vettR[q];
+                    r2 = v->vettC[q];
                     q2 = q;
                 }
             }
@@ -690,11 +764,11 @@ void invertion(Vett *v, Instances *in)
     }
 
     xTmp = v->vettX[q1];
-    rTmp = v->vettR[q1];
+    rTmp = v->vettC[q1];
     v->vettX[q1] = v->vettX[q2];
-    v->vettR[q1] = v->vettR[q2];
+    v->vettC[q1] = v->vettC[q2];
     v->vettX[q2] = xTmp;
-    v->vettR[q2] = rTmp;
+    v->vettC[q2] = rTmp;
 }
 
 void mutation(Vett *v, Instances *in)
@@ -725,13 +799,13 @@ void mutation(Vett *v, Instances *in)
         compatibility = 0;
 
         for (q = 0; q < in->Q; q++) {
-            if (((v->vettR[q] != 0) ^ flag) //voglio occuparmi prima delle query con già una config e poi di quelle senza
-                && v->vettR[q] < rMin  //ricerca minimo
-                //&& v->vettR[q] < soglia //se voglio escludere di cambiare le q con una compatibilità > soglia
+            if (((v->vettC[q] != 0) ^ flag) //voglio occuparmi prima delle query con già una config e poi di quelle senza
+                && v->vettC[q] < rMin  //ricerca minimo
+                //&& v->vettC[q] < soglia //se voglio escludere di cambiare le q con una compatibilità > soglia
                 && tabu[q] != 1) //voglio fare un solo giro di vettX
             {
                 qMin = q;
-                rMin = v->vettR[q];
+                rMin = v->vettC[q];
             }
         }
 
@@ -781,6 +855,7 @@ void mutation(Vett *v, Instances *in)
             }
             createZi(v, in);
             calculateOF(v, in);
+            calculateC(v, in);
             calculateR(v, in);
             relax3(v, in);
         }
@@ -799,6 +874,7 @@ void cpySol(Vett *dst, Vett *src, Instances *in)
 
     for (i=0; i<in->Q; i++) {
         dst->vettX[i] = src->vettX[i];
+        dst->vettC[i] = src->vettC[i];
         dst->vettR[i] = src->vettR[i];
     }
 

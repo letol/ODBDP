@@ -778,14 +778,13 @@ void mutation(Vett *v, Instances *in)
 {
     int i, q, c = 0;
     float compatibility, maxCompatibility;
-    int divisore,cMax;
+    int divisore, cMax;
 
     int qMin;
     float rMin;
 
     int flag = 0;
-    float soglia = 0.15; //valore empirico
-
+    float soglia = 0.17; //valore empirico
 
     int tabu[in->Q];
     for (int var = 0; var < in->Q; ++var) {
@@ -828,7 +827,7 @@ void mutation(Vett *v, Instances *in)
                         if (v->Zi[i] == 1) {
                             divisore++;
                             if (in->Eci[c][i] == v->Zi[i]) {
-                                compatibility ++;
+                                compatibility++;
                             }
                         }
                     }
@@ -860,6 +859,33 @@ void mutation(Vett *v, Instances *in)
             relax3(v, in);
         }
     }
+
+    int qIn;
+    for (q = 0; q < in->Q; ++q) {
+
+        if (v->vettX[q] != -1) {
+            c = v->vettX[q];
+
+            for (qIn = 0; qIn < in->Q; ++qIn) {
+                if (v->vettX[(q + qIn) % in->Q] != -1)
+                {
+                    if (in->Gcq[c][(q + qIn) % in->Q] > in->Gcq[v->vettX[(q + qIn) % in->Q]][(q + qIn)% in->Q]) {
+                        v->vettX[(q + qIn) % in->Q] = c;
+                    }
+                }
+                else {
+                    if (in->Gcq[c][(q + qIn) % in->Q] >0)
+                        v->vettX[(q + qIn) % in->Q] = c;
+                }
+            }
+        }
+    }
+    createZi(v, in);
+    calculateOF(v, in);
+    calculateC(v, in);
+    calculateR(v, in);
+    relax3(v, in);
+
 }
 
 void cpySol(Vett *dst, Vett *src, Instances *in)

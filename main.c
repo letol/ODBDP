@@ -5,8 +5,7 @@
 #include <time.h>
 #include <limits.h>
 
-#define true 1
-#define false 0
+#define debug 1
 #define numN 5
 
 typedef struct instances{
@@ -62,7 +61,9 @@ void createZifromYc(Vett *v, Instances *in);        //calcola il vettore Zi da Y
 
 int main(int argc, char* argv[])
 {
-    //srand((unsigned int) time(NULL));
+#if debug == 0
+    srand((unsigned int) time(NULL));
+#endif
     int c, q, i, iteration=0;
     int count, actualMemory, gainC;
     Instances in;
@@ -102,7 +103,7 @@ int main(int argc, char* argv[])
 
 
     assert( (changed=malloc(in.C*sizeof(int)))!= NULL );
-/*
+#if debug >= 2
     printf("\navailablemem: %d\n", temp.availableMem);
 
 
@@ -148,7 +149,7 @@ int main(int argc, char* argv[])
     {
         printf("%d ", temp.gainc[c]);
     }
-*/
+#endif
     Vett2Sol(&temp, &best, &in);
 
     for(q=0; q<in.C; q++)
@@ -260,6 +261,9 @@ int main(int argc, char* argv[])
 
         if( (iteration%600) == 599)
         {
+#if debug >= 1
+            printf("\nNEW START\n");
+#endif
             TSinit(&temp, &in);
             iteration=0;
             count=0;
@@ -284,33 +288,35 @@ int main(int argc, char* argv[])
             count=0;
         }
 
-        //printf("gain: %d feasible: %d\n", temp.gain, temp.feasible);
+#if debug >= 1
+#if debug <= 1
+        if (temp.feasible == 1)
+#endif
+        printf("gain: %d feasible: %d\n", temp.gain, temp.feasible);
+#endif
 
 
     }
-    /*
-        while(clock()<30000){}
-    */
 
-
+#if debug >= 1
     printf("\nBest solution is:\n");
-//    for(c=0; c<in.C; c++)
-//    {
-//        for(q=0; q<in.Q; q++)
-//        {
-//            printf("%d ", best.Xcq[c][q]);
-//        }
-//        printf("\n");
-//    }
-//    printf("\n");
-//    for(i=0; i<in.I; i++)
-//    {
-//        printf("%d ", best.Zi[i]);
-//    }
+    for(c=0; c<in.C; c++)
+    {
+        for(q=0; q<in.Q; q++)
+        {
+            printf("%d ", best.Xcq[c][q]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+    for(i=0; i<in.I; i++)
+    {
+        printf("%d ", best.Zi[i]);
+    }
 
     printf("\ngain: %d\nmemory: %d\nfeasible: %d", best.gain, best.mem, best.feasible);
     printf("\n\nIteration: %d\n\n", iteration);
-
+#endif
     //TODO: Ricordiamoci delle free
 
     return 0;

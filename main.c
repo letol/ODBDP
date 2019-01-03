@@ -6,9 +6,9 @@
 #include <limits.h>
 
 #define numP 50
-#define debug 1
+#define debug 0
 #define probOffset .01
-#define TSiter 500
+#define TSiter 600
 
 
 typedef struct instances{
@@ -39,7 +39,7 @@ typedef struct vett{
     int *Fc;
     int *confmem;
     int *gainc;
-    int aviableMem;
+    int availableMem;
 }Vett;
 
 void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop, Vett *temp, Vett *selectedParents, Vett *children);
@@ -70,6 +70,8 @@ void createYc(Vett *temp, Instances *in);           //dal vettore vettX ricava i
 void configureC(Vett *x, Instances *in);            //changeConfMem  changeFc  changeGainC
 void changeFc(Vett *x, Instances *in);              //calcola e sostituisce i valori del vettore Fc
 void changeGainC(Vett *x, Instances *in);           //calcola e sostituisce i valori del vettore gainc
+void createZifromYc(Vett *v, Instances *in);        //calcola il vettore Zi da Yc
+
 
 int main(int argc, char* argv[])
 {
@@ -465,66 +467,77 @@ void GAinit(Vett *pop, Instances *in)
     int j=0, i=0,c=0, q=0;
     int count, Memory, numconf;
 
-    for(j=0; j<numP; j++)
-    {
-        pop[j].feasible=-1;
-        pop[j].gain=-1;
+    for(j=0; j<numP; j++) {
+        pop[j].feasible = -1;
+        pop[j].gain = -1;
 
-        while(pop[j].feasible==0 || pop[j].gain <=0)
-        {
-            count=0;
-            Memory=in->M;
-            numconf=0;
-            for(c=0; c<in->C; c++)
-            {
-                pop[j].confmem[c]=0;
-                for(i=0; i<in->I; i++)
-                {
-                    if(in->Eci[c][i]==1)
-                    {
-                        pop[j].confmem[c]+=in->Mi[i];
+        while (pop[j].feasible == 0 || pop[j].gain <= 0) {
+            count = 0;
+            Memory = in->M;
+            numconf = 0;
+            for (c = 0; c < in->C; c++) {
+                pop[j].confmem[c] = 0;
+                for (i = 0; i < in->I; i++) {
+                    if (in->Eci[c][i] == 1) {
+                        pop[j].confmem[c] += in->Mi[i];
                     }
                 }
             }
-            for(q=0; q<in->Q;q++)
-            {
-                pop[j].vettX[q]=-1;
+            for (q = 0; q < in->Q; q++) {
+                pop[j].vettX[q] = -1;
             }
 
             createZi(&pop[j], in);
 
-            for(c=rand()%in->C; count<(in->C/5); count++, c=rand()%in->C)
-            {
-                if( (Memory-pop[j].confmem[c]) > 0)
-                {
+            for (c = rand() % in->C; count < (in->C / 5); count++, c = rand() % in->C) {
+                if ((Memory - pop[j].confmem[c]) > 0) {
                     numconf++;
-                    for(q=0;q<in->Q;q++)
-                    {
-                        if((pop[j].vettX[q]) == -1 && (in->Gcq[c][q]) > 0 )
-                        {
-                            pop[j].vettX[q]=c;
-                        }
-                        else if( (pop[j].vettX[q]) > -1)
-                        {
-                            if(in->Gcq[c][q] > in->Gcq[pop[j].vettX[q]][q])
-                            {
-                                pop[j].vettX[q]=c;
+                    for (q = 0; q < in->Q; q++) {
+                        if ((pop[j].vettX[q]) == -1 && (in->Gcq[c][q]) > 0) {
+                            pop[j].vettX[q] = c;
+                        } else if ((pop[j].vettX[q]) > -1) {
+                            if (in->Gcq[c][q] > in->Gcq[pop[j].vettX[q]][q]) {
+                                pop[j].vettX[q] = c;
                             }
                         }
                     }
 
-                    Memory-=pop[j].confmem[c];
+                    Memory -= pop[j].confmem[c];
                     createZi(&pop[j], in);
                     changeConfMem(&pop[j], in);
                     calculateOF(&pop[j], in);
                     calculateC(&pop[j], in);
                     calculateR(&pop[j], in);
                     relax3(&pop[j], in);
+                    createYc(&pop[j], in);
+                    changeFc(&pop[j], in);
                 }
             }
         }
+
+        pop[j].availableMem = in->M - pop[j].mem;
+
+        for (c = 0, numconf = 0; c < in->C; c++) {
+            if (pop[j].confmem[c] <= pop[j].availableMem) {
+                pop[j].Yc[c] = 1;
+                pop[j].availableMem -= pop[j].confmem[c];
+                pop[j].confmem[c] = 0;
+                numconf++;
+            }
+        }
+
+        createVettXfromYc(&pop[j], in);
+        createYc(&pop[j], in);
+        createZifromYc(&pop[j], in);
+        configureC(&pop[j], in);
+        calculateOF(&pop[j], in);
+        relax3(&pop[j], in);
 #if debug >= 1
         printf("configuzioni usate %d\n", numconf);
+#endif
+        pop[j].availableMem = in->M - pop[j].mem;
+#if debug >= 1
+        printf("confmem %d\n", pop[j].availableMem);
 #endif
     }
 }
@@ -573,7 +586,7 @@ void searchMax(Vett *pop, int dim, Sol *best, Instances *in)
 
 
 void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in)
-//scorro i due vettori contemporaneamente appena una dei due prevarica l'altro in fatto di gain offerto scelgo quello come punto di taglio
+//scorro i due vettori contemporaneamente nei due sensi. Appena uno dei due prevarica l'altro in fatto di gain offerto scelgo quello come punto di taglio
 {
     int q;
     int x = (rand() % (in->Q - 1)) + 1;
@@ -926,7 +939,7 @@ void cpySol(Vett *dst, Vett *src, Instances *in)
     dst->feasible = src->feasible;
     dst->gain = src->gain;
     dst->mem = src->mem;
-    dst->aviableMem = src->aviableMem;
+    dst->availableMem = src->availableMem;
 
     for (i=0; i<in->Q; i++) {
         dst->vettX[i] = src->vettX[i];
@@ -987,7 +1000,7 @@ void TS(Vett *temp, Vett *best, Instances *in)
         worstVal=1000000000.0;
         bestq=0;
         bestc=0;
-        bestVal=0;
+        bestVal=-1000000000.0;
         worstmem=1000000000.0;
         bestmem=0.0;
         count++;
@@ -1218,4 +1231,31 @@ void changeGainC(Vett *x, Instances *in)
         }
     }
 
+}
+
+void createZifromYc(Vett *v, Instances *in)
+{
+    int i, c;
+
+    for(i=0; i<in->I; i++)
+    {
+        v->Zi[i]=0;
+    }
+
+    for(c=0; c<in->C; c++)
+    {
+        if(v->Yc[c]==1)
+        {
+            for(i=0; i<in->I; i++)
+            {
+                if(in->Eci[c][i]==1)
+                {
+                    v->Zi[i]=1;
+                }
+            }
+        }
+
+    }
+
+    return;
 }

@@ -5,9 +5,10 @@
 #include <time.h>
 #include <limits.h>
 
-#define numP 250
+#define numP 50
 #define debug 1
-#define probOffset .1
+#define probOffset .01
+#define TSiter 500
 
 
 typedef struct instances{
@@ -34,16 +35,22 @@ typedef struct vett{
     int gain;
     int *Zi;
     int feasible;
+    int *Yc;
+    int *Fc;
+    int *confmem;
+    int *gainc;
+    int aviableMem;
 }Vett;
 
-void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop, Vett *selectedParents, Vett *children);
+void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop, Vett *temp, Vett *selectedParents, Vett *children);
 void letturavet(int *v, FILE *fin, int r);
 void letturamat(int **m, FILE *fin, int r, int c);
+
 void calculateOF(Vett *v, Instances *in);
 int relax3(Vett *v, Instances *in);
 void GAinit(Vett *pop, Instances *in);
 void createZi(Vett *v, Instances *in);
-void searchMax(Vett *pop, Sol *best, Instances *in);
+void searchMax(Vett *pop, int dim, Sol *best, Instances *in);
 void selectParents(Vett *pop, Vett *selPar, Instances *in);
 void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in);
 void sobstitute(Vett *pop, Vett *children, Instances *in);
@@ -54,8 +61,15 @@ void Vett2Sol(Vett *v, Sol *s, Instances *in);
 void invertion(Vett *v, Instances *in);
 void mutation(Vett *v, Instances *in);
 void cpySol(Vett *dst, Vett *src, Instances *in);
-void changeConfMem(int *confmem, Vett *x, Instances *in);
-//void averageGain(int *av,Instances *in);
+void changeConfMem(Vett *x, Instances *in);         //calcola e sostituisce i valori del vettore confmem
+
+void TS(Vett *temp, Vett *best, Instances *in);
+int evaluateGain(int c, Vett *temp, Instances *in);     //data una c, quanto ci fa guadagnare
+void createVettXfromYc(Vett *x, Instances *in);     //dal vettore Yc ricava il vettore vettX
+void createYc(Vett *temp, Instances *in);           //dal vettore vettX ricava il vettore Yc
+void configureC(Vett *x, Instances *in);            //changeConfMem  changeFc  changeGainC
+void changeFc(Vett *x, Instances *in);              //calcola e sostituisce i valori del vettore Fc
+void changeGainC(Vett *x, Instances *in);           //calcola e sostituisce i valori del vettore gainc
 
 int main(int argc, char* argv[])
 {
@@ -65,7 +79,7 @@ int main(int argc, char* argv[])
     FILE *fin, *fout;
     time_t start=time(NULL);
     int timelimit=0;
-    Vett population[numP];
+    Vett population[numP], temp;
     Vett selectedParents[numP/2], children[numP/2];
 
 #if debug == 0
@@ -82,7 +96,7 @@ int main(int argc, char* argv[])
 
     assert(fin != NULL);
 
-    initialization(fin, &in, &best, population, selectedParents, children);
+    initialization(fin, &in, &best, population, &temp, selectedParents, children);
 
     GAinit(population, &in);
 
@@ -116,7 +130,7 @@ int main(int argc, char* argv[])
 
     best.gain=0;
 
-    searchMax(population, &best, &in);
+    searchMax(population, numP, &best, &in);
 
     for(i=0; i<numP; i++) {
         calculateFitness(&population[i], &in);
@@ -166,23 +180,35 @@ int main(int argc, char* argv[])
                         crossover(&selectedParents[i], &selectedParents[j], &children[i], &children[j], &in);
                         Xcount++;
 
+                        createZi(&children[i], &in);
+                        changeConfMem(&children[i], &in);
+                        calculateOF(&children[i], &in);
+                        relax3(&children[i], &in);
+                        createYc(&children[i], &in);
+                        changeFc(&children[i], &in);
+                        changeGainC(&children[i], &in);
+
+                        TS(&temp, &children[i], &in);
+
                         calculateC(&children[i], &in);
                         calculateR(&children[i], &in);
-                        calculateC(&children[j], &in);
-                        calculateR(&children[j], &in);
-
-                        mutation(&children[i], &in);
-                        mutation(&children[j], &in);
-
-                        calculateC(&children[i], &in);
-                        calculateR(&children[i], &in);
-                        calculateC(&children[j], &in);
-                        calculateR(&children[j], &in);
-
                         createZi(&children[i], &in);
                         calculateOF(&children[i], &in);
                         calculateFitness(&children[i], &in);
 
+
+                        createZi(&children[j], &in);
+                        changeConfMem(&children[j], &in);
+                        calculateOF(&children[j], &in);
+                        relax3(&children[j], &in);
+                        createYc(&children[j], &in);
+                        changeFc(&children[j], &in);
+                        changeGainC(&children[j], &in);
+
+                        TS(&temp, &children[j], &in);
+
+                        calculateC(&children[j], &in);
+                        calculateR(&children[j], &in);
                         createZi(&children[j], &in);
                         calculateOF(&children[j], &in);
                         calculateFitness(&children[j], &in);
@@ -217,6 +243,8 @@ int main(int argc, char* argv[])
             }
         }
 #endif
+
+        searchMax(children, numP/2, &best, &in);
 
         sobstitute(population, children, &in);
 
@@ -258,7 +286,7 @@ int main(int argc, char* argv[])
         }
         Xcount = 0;
 
-        searchMax(population, &best, &in);
+        searchMax(population, numP, &best, &in);
 
 #if debug >= 1
         printf("\nCurrent Best solution stats:\n");
@@ -291,7 +319,7 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop, Vett *selectedParents, Vett *children)
+void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop, Vett *temp, Vett *selectedParents, Vett *children)
 {
     char lecture[40];
     int c=0;
@@ -349,6 +377,10 @@ void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop, Vett *select
         assert( (pop[c].vettC = malloc(in->Q*sizeof(float))) != NULL);
         assert( (pop[c].vettR = malloc(in->Q*sizeof(float))) != NULL);
         assert( (pop[c].Zi = malloc(in->I*sizeof(int))) != NULL);
+        assert( (pop[c].Yc = malloc(in->C*sizeof(int))) != NULL);
+        assert( (pop[c].Fc = malloc(in->C*sizeof(int))) != NULL);
+        assert( (pop[c].confmem = malloc(in->C*sizeof(int))) != NULL);
+        assert( (pop[c].gainc = malloc(in->C*sizeof(int))) != NULL);
     }
 
     for(c=0; c<numP/2; c++)
@@ -357,12 +389,29 @@ void initialization(FILE *fin, Instances *in, Sol *best, Vett *pop, Vett *select
         assert((children[c].vettC = malloc(in->Q * sizeof(float))) != NULL);
         assert((children[c].vettR = malloc(in->Q * sizeof(float))) != NULL);
         assert((children[c].Zi = malloc(in->I * sizeof(int))) != NULL);
+        assert((children[c].Yc = malloc(in->C*sizeof(int))) != NULL);
+        assert((children[c].Fc = malloc(in->C*sizeof(int))) != NULL);
+        assert((children[c].confmem = malloc(in->C*sizeof(int))) != NULL);
+        assert((children[c].gainc = malloc(in->C*sizeof(int))) != NULL);
 
         assert((selectedParents[c].vettX = malloc(in->Q * sizeof(int))) != NULL);
         assert((selectedParents[c].vettC = malloc(in->Q * sizeof(float))) != NULL);
         assert((selectedParents[c].vettR = malloc(in->Q * sizeof(float))) != NULL);
         assert((selectedParents[c].Zi = malloc(in->I * sizeof(int))) != NULL);
+        assert((selectedParents[c].Yc = malloc(in->C * sizeof(int))) != NULL);
+        assert((selectedParents[c].Fc = malloc(in->C * sizeof(int))) != NULL);
+        assert((selectedParents[c].confmem = malloc(in->C * sizeof(int))) != NULL);
+        assert((selectedParents[c].gainc = malloc(in->C * sizeof(int))) != NULL);
     }
+
+    assert( (temp->vettX = malloc(in->Q*sizeof(int))) != NULL);
+    assert( (temp->vettC = malloc(in->Q*sizeof(float))) != NULL);
+    assert( (temp->vettR = malloc(in->Q*sizeof(float))) != NULL);
+    assert( (temp->Zi = malloc(in->I*sizeof(int))) != NULL);
+    assert( (temp->Yc=malloc(in->C*sizeof(int))) != NULL);
+    assert( (temp->Fc=malloc(in->C*sizeof(int))) != NULL );
+    assert( (temp->confmem=malloc(in->C*sizeof(int))) != NULL );
+    assert( (temp->gainc=malloc(in->C*sizeof(int))) != NULL );
 }
 
 void letturavet(int *v, FILE *fin, int r)
@@ -415,10 +464,6 @@ void GAinit(Vett *pop, Instances *in)
 {
     int j=0, i=0,c=0, q=0;
     int count, Memory, numconf;
-    int *confmem;
-    //int av=0;
-    assert(confmem=malloc(in->C*sizeof(int)));
-    //averageGain(&av, in);
 
     for(j=0; j<numP; j++)
     {
@@ -432,12 +477,12 @@ void GAinit(Vett *pop, Instances *in)
             numconf=0;
             for(c=0; c<in->C; c++)
             {
-                confmem[c]=0;
+                pop[j].confmem[c]=0;
                 for(i=0; i<in->I; i++)
                 {
                     if(in->Eci[c][i]==1)
                     {
-                        confmem[c]+=in->Mi[i];
+                        pop[j].confmem[c]+=in->Mi[i];
                     }
                 }
             }
@@ -450,7 +495,7 @@ void GAinit(Vett *pop, Instances *in)
 
             for(c=rand()%in->C; count<(in->C/5); count++, c=rand()%in->C)
             {
-                if( (Memory-confmem[c]) > 0)
+                if( (Memory-pop[j].confmem[c]) > 0)
                 {
                     numconf++;
                     for(q=0;q<in->Q;q++)
@@ -468,9 +513,9 @@ void GAinit(Vett *pop, Instances *in)
                         }
                     }
 
-                    Memory-=confmem[c];
+                    Memory-=pop[j].confmem[c];
                     createZi(&pop[j], in);
-                    changeConfMem(confmem, &pop[j], in);
+                    changeConfMem(&pop[j], in);
                     calculateOF(&pop[j], in);
                     calculateC(&pop[j], in);
                     calculateR(&pop[j], in);
@@ -484,18 +529,18 @@ void GAinit(Vett *pop, Instances *in)
     }
 }
 
-void changeConfMem(int *confmem, Vett *x, Instances *in)
+void changeConfMem(Vett *x, Instances *in)
 {
     int i, j;
 
     for(j=0; j<in->C; j++)
     {
-        confmem[j]=0;
+        x->confmem[j]=0;
         for(i=0; i<in->I; i++)
         {
             if(in->Eci[j][i]==1)
             {
-                confmem[j]+=in->Mi[i];
+                x->confmem[j]+=in->Mi[i];
             }
         }
     }
@@ -506,18 +551,18 @@ void changeConfMem(int *confmem, Vett *x, Instances *in)
         {
             if(in->Eci[j][i] == 1 && x->Zi[i]==1)
             {
-                confmem[j]-=in->Mi[i];
+                x->confmem[j]-=in->Mi[i];
             }
         }
+
     }
-    return;
 }
 
-void searchMax(Vett *pop, Sol *best, Instances *in)
+void searchMax(Vett *pop, int dim, Sol *best, Instances *in)
 // Scan population for best solution
 {
     int i;
-    for(i=0; i<numP; i++)
+    for(i=0; i<dim; i++)
     {
         if(best->gain < pop[i].gain && pop[i].feasible==1)
         {
@@ -525,6 +570,7 @@ void searchMax(Vett *pop, Sol *best, Instances *in)
         }
     }
 }
+
 
 void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in)
 //scorro i due vettori contemporaneamente appena una dei due prevarica l'altro in fatto di gain offerto scelgo quello come punto di taglio
@@ -678,23 +724,6 @@ void createZi(Vett *v, Instances *in)
 
     return;
 }
-/*
-void averageGain(int *av,Instances *in)
-{
-    int c,q;
-    for(c=0;c<in->C;c++)
-    {
-        for(q=0;q<in->Q;q++)
-        {
-            *av+=in->Gcq[c][q];
-        }
-    }
-    *av= *av/(in->C*in->Q);
-
-    return;
-
-}
- */
 
 void selectParents(Vett *pop, Vett *selPar, Instances *in)
 // Select parents with fitness based probability
@@ -897,6 +926,7 @@ void cpySol(Vett *dst, Vett *src, Instances *in)
     dst->feasible = src->feasible;
     dst->gain = src->gain;
     dst->mem = src->mem;
+    dst->aviableMem = src->aviableMem;
 
     for (i=0; i<in->Q; i++) {
         dst->vettX[i] = src->vettX[i];
@@ -907,4 +937,285 @@ void cpySol(Vett *dst, Vett *src, Instances *in)
     for (i=0; i<in->I; i++) {
         dst->Zi[i] = src->Zi[i];
     }
+
+    for (i=0; i<in->C; i++) {
+        dst->Yc[i] = src->Yc[i];
+        dst->Fc[i] = src->Fc[i];
+        dst->confmem[i] = src->confmem[i];
+        dst->gainc[i] = src->gainc[i];
+    }
+}
+
+void TS(Vett *temp, Vett *best, Instances *in)
+{
+    int c, q, i, iteration=0;
+    int count;
+    int worst, bestq, bestc;
+    double bestVal, worstVal;
+    int *changed;
+    double worstmem=0.0, bestmem=0.0;
+    int fc=0;
+
+    assert( (changed=malloc(in->C*sizeof(int)))!= NULL );
+
+    cpySol(temp, best, in);
+
+#if debug >= 1
+    if (temp->feasible != -2) {
+        printf("\nStarting child\n");
+        for (q = 0; q < in->Q; q++) {
+            printf("%d ", temp->vettX[q]);
+        }
+        printf("\nvettore Yc\n ");
+        for (i = 0; i < in->C; i++) {
+            printf("%d ", temp->Yc[i]);
+        }
+        printf("\ngain: %d\nmemory: %d\nfeasible:%d \n", temp->gain, temp->mem, temp->feasible);
+    }
+#endif
+
+    count=0;
+
+    for(q=0; q<in->C; q++)
+    {
+        changed[q]=0;
+    }
+
+    while (iteration <= TSiter)
+    {
+        worst=0;
+        worstVal=1000000000.0;
+        bestq=0;
+        bestc=0;
+        bestVal=0;
+        worstmem=1000000000.0;
+        bestmem=0.0;
+        count++;
+
+        for(q=0;q<in->C;q++)
+        {
+            if(changed[q]==count)
+            {
+                changed[q]=0;
+            }
+        }
+
+        if(temp->feasible==1)
+        {
+            for(c=0; c<in->C; c++)
+            {
+                if(temp->Yc[c]==1 && changed[c]==0)  //Ricerca della configurazione attiva che fornisce il gain minore
+                {
+                    for(fc=0,i=0; i<in->I; i++)
+                    {
+                        if(in->Eci[c][i]==1)
+                        {
+                            fc+=in->Fi[i];
+                        }
+                    }
+                    if(temp->confmem[c] != 0 && worstVal > ((double)(temp->gainc[c]-fc))/(temp->confmem[c]))
+                    {
+                        worst=c;
+                        worstVal=((double)(temp->gainc[c]-fc))/(temp->confmem[c]);
+                    }
+                }
+                else if(temp->Yc[c]==0 && bestVal < (bestq=evaluateGain(c,temp,in)-temp->Fc[c]) && changed[c]==0)   //Ricerca della configurazione non attiva che fornisce il gain maggiore
+                {
+                    bestVal=bestq;
+                    bestc=c;
+                }
+            }
+            //    printf(" fea %d %d\n", worst, bestc);
+            temp->Yc[worst]=0;
+            temp->Yc[bestc]=1;
+            changed[worst]=count;
+            changed[bestc]=count;
+        }
+        else
+        {
+            for(c=0; c<in->C; c++)
+            {
+                if(temp->Yc[c]==1 && changed[c]==0) //Ricerca della configurazione attiva in generale peggiore
+                {
+                    for(bestVal=0, fc=0, i=0; i<in->I; i++)
+                    {
+                        if(in->Eci[c][i]==1)
+                        {
+                            bestVal+=in->Mi[i];
+                            fc+=in->Fi[i];
+                        }
+                    }
+                    if(worstmem > ((temp->gainc[c]-fc)/(bestVal)))
+					{
+						worstmem = ((temp->gainc[c]-fc)/(bestVal));
+						worst=c;
+					}
+                }
+                else if(temp->Yc[c]==0 && changed[c]==0 ) //Ricerca della configurazione non attiva che fornisce il gain maggiore
+                {
+                    if(bestmem < ( evaluateGain(c, temp, in) - temp->Fc[c]))
+                    {
+                        bestc=c;
+                        bestmem=(evaluateGain(c, temp, in)-temp->Fc[c]);
+                    }
+                }
+            }
+
+            temp->Yc[worst]=0;
+            temp->Yc[bestc]=1;
+            changed[worst]=count;
+            changed[bestc]=count;
+            //  printf(" no fea %d %d\n", worst, bestc);
+        }
+
+        createVettXfromYc(temp, in);
+        createYc(temp, in);
+        configureC(temp, in);
+        createZi(temp, in);
+        calculateOF(temp, in);
+        relax3(temp, in);
+        iteration++;
+
+        if(temp->gain > best->gain && temp->feasible==1)
+        {
+            cpySol(best, temp, in);
+        }
+
+        if(count==7)
+        {
+            count=0;
+        }
+
+#if debug >= 1
+#if debug <= 1
+        if (temp->feasible == 1)
+#endif
+            printf("gain: %d feasible: %d\n", temp->gain, temp->feasible);
+#endif
+
+
+    }
+}
+
+int evaluateGain(int c, Vett *temp, Instances *in)
+{
+    int q;
+    int gain=0, mom=0;
+
+    for(q=0;q<in->Q; q++)
+    {
+        if(temp->vettX[q]==-1 && in->Gcq[c][q]>0)
+        {
+            gain+=in->Gcq[c][q];
+        }
+        else if( temp->vettX[q] > -1)
+        {
+            if( (mom=in->Gcq[c][q] - in->Gcq[temp->vettX[q]][q]) > 0)
+            {
+                gain+=mom;
+            }
+        }
+    }
+    return gain;
+}
+
+void createVettXfromYc(Vett *x, Instances *in)
+{
+    int c,q;
+
+    for(q=0; q<in->Q; q++)
+    {
+        x->vettX[q]=-1;
+    }
+
+    for(c=0;c<in->C; c++)
+    {
+        for(q=0; q<in->Q; q++)
+        {
+            if(x->vettX[q]!=-1)
+            {
+                if(x->Yc[c]==1 && in->Gcq[c][q] > in->Gcq[x->vettX[q]][q])
+                {
+                    x->vettX[q]=c;
+                }
+            }
+            else if( x->vettX[q]==-1 && x->Yc[c]==1 && in->Gcq[c][q]>0)
+            {
+                x->vettX[q]=c;
+            }
+        }
+    }
+    return;
+}
+
+void createYc(Vett *temp, Instances *in)
+{
+    int q, c;
+
+    for(c=0; c<in->C; c++)
+    {
+        temp->Yc[c]=0;
+    }
+
+    for(q=0; q<in->Q; q++)
+    {
+        if(temp->vettX[q] > -1)
+        {
+            temp->Yc[temp->vettX[q]]=1;
+        }
+    }
+}
+
+void configureC(Vett *x, Instances *in)
+{
+    changeFc(x,in);
+    changeConfMem(x,in);
+    changeGainC(x,in);
+}
+
+void changeFc(Vett *x, Instances *in)
+{
+    int i, c;
+
+    for(c=0; c<in->C; c++)
+    {
+        x->Fc[c]=0;
+        for(i=0; i<in->I; i++)
+        {
+            if(in->Eci[c][i]==1)
+            {
+                x->Fc[c]+=in->Fi[i];
+            }
+        }
+    }
+
+    for(i=0; i<in->I; i++)
+    {
+        for(c=0; c<in->C; c++)
+        {
+            if(in->Eci[c][i] == 1 && x->Zi[i]==1)
+            {
+                x->Fc[c]-=in->Fi[i];
+            }
+        }
+
+    }
+}
+
+void changeGainC(Vett *x, Instances *in)
+{
+    int q,c;
+
+    for(c=0;c<in->C; c++)
+    {
+        x->gainc[c]=0;
+    }
+    for(q=0; q<in->Q; q++)
+    {
+        if(x->vettX[q]>-1)
+        {
+            x->gainc[x->vettX[q]]+=in->Gcq[x->vettX[q]][q];
+        }
+    }
+
 }

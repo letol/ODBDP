@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 
 #define true 1
 #define false 0
@@ -31,37 +32,37 @@ typedef struct vett{
     int gain;
     int *Zi;
     int feasible;
-    int *Yc;
-    int *Fc;
-    int *confmem;
-    int *gainc;
-    int availableMem;
+    int *Yc;            //vettore configurazione attive
+    int *Fc;            //vettore dell'eventuale fixed cost di una configurazione
+    int *confmem;       //vettore dell'eventuale memoria di una configurazione
+    int *gainc;         //attuale guadagno fornito da una configurazione (non include il fixed cost
+    int availableMem;   //in.M-vett.mem
 }Vett;
 
 void initialization(FILE *fin, Sol *best, Vett *pop, Instances *in);
 void letturavet(int *v, FILE *fin, int r);
 void letturamat(int **m, FILE *fin, int r, int c);
 
-
 void TSinit(Vett *pop, Instances *in);
 void createZi(Vett *v, Instances *in);
 void calculateOF(Vett *v, Instances *in);
 int check3(Vett *v, Instances *in);
-void changeConfMem(Vett *x, Instances *in);
+void changeConfMem(Vett *x, Instances *in);         //calcola e sostituisce i valori del vettore confmem
 
 void Vett2Sol(Vett *v, Sol *s, Instances *in);
-void changeFc(Vett *x, Instances *in);
-void cpyVettX(Vett *v1, Vett *v2, Instances *in);
-void createYc(Vett *temp, Instances *in);
-void createVettXfromYc(Vett *x, Instances *in);
-void changeGainC(Vett *x, Instances *in);
-void configureC(Vett *x, Instances *in);
-int evaluateGain(int c, Vett *temp, Instances *in);
+void changeFc(Vett *x, Instances *in);              //calcola e sostituisce i valori del vettore Fc
+void cpyVettX(Vett *v1, Vett *v2, Instances *in);   //copia del vettore v2->vettX in v1->vettX
+void createYc(Vett *temp, Instances *in);           //dal vettore vettX ricava il vettore Yc
+void createVettXfromYc(Vett *x, Instances *in);     //dal vettore Yc ricava il vettore vettX
+void changeGainC(Vett *x, Instances *in);           //calcola e sostituisce i valori del vettore gainc
+void configureC(Vett *x, Instances *in);            //changeConfMem  changeFc  changeGainC
+int evaluateGain(int c, Vett *temp, Instances *in);     //data una c, quanto ci fa guadagnare
 
-void createZifromYc(Vett *v, Instances *in);
+void createZifromYc(Vett *v, Instances *in);        //calcola il vettore Zi da Yc
 
 int main(int argc, char* argv[])
 {
+    //srand((unsigned int) time(NULL));
     int c, q, i, iteration=0;
     int count, actualMemory, gainC;
     Instances in;
@@ -70,10 +71,10 @@ int main(int argc, char* argv[])
     time_t start=time(NULL);
     int timelimit=0;
     Vett temp, *nei;
-    int worst, worstVal, bestq, bestc;
-    int bestVal;
+    int worst, bestq, bestc;
+    float bestVal, worstVal;
     int *changed;
-    int worstmem=0;
+    float worstmem=0.0, bestmem=0.0;
     int fc=0;
 
     assert(argc == 4);
@@ -162,11 +163,12 @@ int main(int argc, char* argv[])
     while ((time(NULL) - start)<=timelimit)
     {
         worst=0;
-        worstVal=10000;
+        worstVal=1000000000.0;
         bestq=0;
         bestc=0;
         bestVal=0;
-        worstmem=0;
+        worstmem=1000000000.0;
+        bestmem=0.0;
         count++;
 
         for(q=0;q<in.C;q++)
@@ -177,11 +179,14 @@ int main(int argc, char* argv[])
             }
         }
 
+
+
         if(temp.feasible==1)
         {
+
             for(c=0; c<in.C; c++)
             {
-                if(temp.Yc[c]==1 && changed[c]==0)
+                if(temp.Yc[c]==1 && changed[c]==0)  //Ricerca della configurazione attiva in generale peggiore
                 {
                     for(fc=0,i=0; i<in.I; i++)
                     {
@@ -190,13 +195,13 @@ int main(int argc, char* argv[])
                             fc+=in.Fi[i];
                         }
                     }
-                    if(worstVal > (temp.gainc[c]-fc))
+                    if(temp.confmem[c] != 0 && worstVal > ((temp.gainc[c]-fc))/(temp.confmem[c]))
                     {
                         worst=c;
-                        worstVal=temp.gainc[c]-fc;
+                        worstVal=((temp.gainc[c]-fc))/(temp.confmem[c]);
                     }
                 }
-                else if(temp.Yc[c]==0 && bestVal < (bestq=evaluateGain(c,&temp,&in)-temp.Fc[c]) && changed[c]==0)
+                else if(temp.Yc[c]==0 && bestVal < (bestq=(evaluateGain(c,&temp,&in)-temp.Fc[c])) && changed[c]==0)   //Ricerca della configurazione non attiva che fornisce il gain maggiore
                 {
                     bestVal=bestq;
                     bestc=c;
@@ -207,54 +212,38 @@ int main(int argc, char* argv[])
             temp.Yc[bestc]=1;
             changed[worst]=count;
             changed[bestc]=count;
+
         }
         else
         {
-            /*
-            for(i=0; i<in.I; i++)
-            {
-                if(bestVal < in.Mi[i] && temp.Zi[i]==1)
-                {
-                    bestc=i;
-                    bestVal = in.Mi[i];
-                }
-            }
-            temp.Zi[bestc]=0;
-            for(c=0; c<in.C;c++)
-            {
-                if(in.Eci[c][bestc]==1)
-                {
-                    temp.Yc[c]=0;
-                }
-            }
-            */
-
             for(c=0; c<in.C; c++)
             {
-                if(temp.Yc[c]==1 && changed[c]==0)
+                if(temp.Yc[c]==1 && changed[c]==0) //Ricerca della configurazione attiva in generale peggiore
                 {
-                    for(bestVal=0, i=0; i<in.I; i++)
+                    for(bestVal=0, fc=0, i=0; i<in.I; i++)
                     {
                         if(in.Eci[c][i]==1)
                         {
                             bestVal+=in.Mi[i];
+                            fc+=in.Fi[i];
                         }
                     }
-                    if(worstmem < bestVal)
+                    if(worstmem > ((temp.gainc[c]-fc)/(bestVal)))
                     {
-                        worstmem = bestVal;
+                        worstmem = ((temp.gainc[c]-fc)/(bestVal));
                         worst=c;
                     }
                 }
-                else if(temp.Yc[c]==0 && changed[c]==0)
+                else if(temp.Yc[c]==0 && changed[c]==0 ) //Ricerca della configurazione non attiva che fornisce il gain maggiore
                 {
-                    if(worstVal>temp.confmem[c])
+                    if(bestmem < ( evaluateGain(c, &temp, &in) - temp.Fc[c]))
                     {
                         bestc=c;
-                        worstVal=temp.confmem[c];
+                        bestmem=(evaluateGain(c, &temp, &in)-temp.Fc[c]);
                     }
                 }
             }
+
             temp.Yc[worst]=0;
             temp.Yc[bestc]=1;
             changed[worst]=count;
@@ -273,18 +262,17 @@ int main(int argc, char* argv[])
         {
             TSinit(&temp, &in);
             iteration=0;
+            count=0;
+            for(q=0;q<in.C;q++)
+            {
+                changed[q]=0;
+            }
         }
 
         if(temp.gain > best.gain && temp.feasible==1)
         {
             Vett2Sol(&temp, &best, &in);
             iteration=0;
-            count=0;
-            for(q=0;q<in.C;q++)
-            {
-                changed[q]=0;
-            }
-
         }
         else
         {
@@ -306,22 +294,22 @@ int main(int argc, char* argv[])
 
 
     printf("\nBest solution is:\n");
-    for(c=0; c<in.C; c++)
-    {
-        for(q=0; q<in.Q; q++)
-        {
-            printf("%d ", best.Xcq[c][q]);
-        }
-        printf("\n");
-    }
-    printf("\n");
-    for(i=0; i<in.I; i++)
-    {
-        printf("%d ", best.Zi[i]);
-    }
+//    for(c=0; c<in.C; c++)
+//    {
+//        for(q=0; q<in.Q; q++)
+//        {
+//            printf("%d ", best.Xcq[c][q]);
+//        }
+//        printf("\n");
+//    }
+//    printf("\n");
+//    for(i=0; i<in.I; i++)
+//    {
+//        printf("%d ", best.Zi[i]);
+//    }
 
     printf("\ngain: %d\nmemory: %d\nfeasible: %d", best.gain, best.mem, best.feasible);
-    printf("\n\nIteration: %d", iteration);
+    printf("\n\nIteration: %d\n\n", iteration);
 
     //TODO: Ricordiamoci delle free
 
@@ -487,7 +475,7 @@ void TSinit(Vett *pop, Instances *in)
 
     pop->availableMem=in->M - pop->mem;
 
-    for(c=0, numconf=0; c<in->C; c++)
+    for(c=0, numconf=0; c<in->C; c++) //
     {
         if(pop->confmem[c] <= pop->availableMem)
         {
@@ -504,10 +492,10 @@ void TSinit(Vett *pop, Instances *in)
     configureC(pop, in);
     calculateOF(pop, in);
     check3(pop, in);
-    printf("configurazioni usate %d\n", numconf);
+    //printf("configurazioni usate %d\n", numconf);
 
     pop->availableMem=in->M - pop->mem;
-    printf("confmem %d\n", pop->availableMem);
+    //printf("confmem %d\n", pop->availableMem);
 
     return;
 }

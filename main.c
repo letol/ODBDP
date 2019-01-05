@@ -4,9 +4,10 @@
 #include <string.h>
 #include <time.h>
 #include <limits.h>
+#include <math.h>
 
 #define numP 50
-#define debug 0
+#define debug 1
 #define probOffset .01
 #define TSiter 600
 
@@ -466,30 +467,32 @@ void GAinit(Vett *pop, Instances *in)
 {
     int j=0, i=0,c=0, q=0;
     int count, Memory, numconf;
+    double iteration;
+    int soglia;
 
     for(j=0; j<numP; j++) {
         pop[j].feasible = -1;
         pop[j].gain = -1;
+        iteration = 0;
+        soglia = 1;
+        while ((pop[j].feasible == 0 || pop[j].gain <=  -exp(iteration)) && iteration < 6) //bisogna compilare con l'opzione -lm
+        {
 
-        while (pop[j].feasible == 0 || pop[j].gain <= 0) {
+            iteration+=0.5;
+
             count = 0;
             Memory = in->M;
             numconf = 0;
-            for (c = 0; c < in->C; c++) {
-                pop[j].confmem[c] = 0;
-                for (i = 0; i < in->I; i++) {
-                    if (in->Eci[c][i] == 1) {
-                        pop[j].confmem[c] += in->Mi[i];
-                    }
-                }
-            }
+
             for (q = 0; q < in->Q; q++) {
                 pop[j].vettX[q] = -1;
             }
 
             createZi(&pop[j], in);
 
-            for (c = rand() % in->C; count < (in->C / 5); count++, c = rand() % in->C) {
+            for (c = rand() % in->C; count < (in->C / 5); count++, c = rand() % in->C)
+            {
+                changeConfMem(&pop[j], in);
                 if ((Memory - pop[j].confmem[c]) > 0) {
                     numconf++;
                     for (q = 0; q < in->Q; q++) {
@@ -504,7 +507,7 @@ void GAinit(Vett *pop, Instances *in)
 
                     Memory -= pop[j].confmem[c];
                     createZi(&pop[j], in);
-                    changeConfMem(&pop[j], in);
+                    //changeConfMem(&pop[j], in);
                     calculateOF(&pop[j], in);
                     calculateC(&pop[j], in);
                     calculateR(&pop[j], in);
@@ -513,7 +516,17 @@ void GAinit(Vett *pop, Instances *in)
                     changeFc(&pop[j], in);
                 }
             }
+//            if (iteration > 3) {
+//                printf("inside\n%f %f\n",exp(iteration),iteration);
+//                printf("gain %d\n",pop[j].gain);
+//                printf("feasible %d\n",pop[j].feasible);
+//               printf("\n\n");
+//
+//		}
         }
+//        printf("%d\n",iteration);
+//        printf("gain %d\n",pop[j].gain);
+//        printf("feasible %d\n",pop[j].feasible);
 
         pop[j].availableMem = in->M - pop[j].mem;
 
@@ -551,23 +564,11 @@ void changeConfMem(Vett *x, Instances *in)
         x->confmem[j]=0;
         for(i=0; i<in->I; i++)
         {
-            if(in->Eci[j][i]==1)
+            if(in->Eci[j][i]==1 && x->Zi[i]==0)
             {
                 x->confmem[j]+=in->Mi[i];
             }
         }
-    }
-
-    for(i=0; i<in->I; i++)
-    {
-        for(j=0; j<in->C; j++)
-        {
-            if(in->Eci[j][i] == 1 && x->Zi[i]==1)
-            {
-                x->confmem[j]-=in->Mi[i];
-            }
-        }
-
     }
 }
 

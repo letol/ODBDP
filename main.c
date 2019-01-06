@@ -56,7 +56,7 @@ void calculateOF(Vett *v, Instances *in);
 int check3(Vett *v, Instances *in);
 void GAinit(Vett *pop, Instances *in);
 void createZi(Vett *v, Instances *in);
-void searchMax(Vett *pop, int dim, Sol *best, Instances *in);
+void searchMax(Vett *pop, int dim, Sol *best, Instances *in, FILE *fout);
 void selectParents(Vett *pop, Vett *selPar, Instances *in);
 void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in);
 void sobstitute(Vett *pop, Vett *children, Instances *in);
@@ -69,7 +69,8 @@ void mutation(Vett *v, Instances *in);
 void cpySol(Vett *dst, Vett *src, Instances *in);
 void changeConfMem(Vett *x, Instances *in);         //calcola e sostituisce i valori del vettore confmem
 
-void TS(Vett *best, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *neibest, int *neiworst, Instances *in);
+void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *neibest, int *neiworst,
+        Instances *in);
 
 void eventualMemCalc(Vett *x, Instances *in);   //calcolo vettore eventualMemc
 void changeFc(Vett *x, Instances *in);          //calcolo vettore Fc
@@ -86,6 +87,7 @@ int evaluateGain(int c, Vett *temp, Instances *in);     //calcolo elemento vetto
 
 void createSolution(Vett *x, Instances *in);            //richiama le funzioni necessarie per costruire la soluzione a partire da Yc
 
+void bestWrite(Sol *best, Instances *in, FILE *fout);
 
 int main(int argc, char* argv[])
 {
@@ -112,6 +114,10 @@ int main(int argc, char* argv[])
     timelimit = atoi(argv[3]);
 
     fin = fopen(argv[1], "r");
+
+    char file[100];
+	sprintf(file, "%s_OMAMZ_group04.sol", argv[1]);
+	fout = fopen(file, "w+");
 
     assert(fin != NULL);
 
@@ -150,7 +156,7 @@ int main(int argc, char* argv[])
 
     best.gain=0;
 
-    searchMax(population, numP, &best, &in);
+    searchMax(population, numP, &best, &in, fout);
 
     for(i=0; i<numP; i++) {
         calculateFitness(&population[i], &in);
@@ -258,7 +264,7 @@ int main(int argc, char* argv[])
         }
 #endif
 
-        searchMax(children, numP/2, &best, &in);
+        searchMax(children, numP/2, &best, &in, fout);
 
         sobstitute(population, children, &in);
 
@@ -300,7 +306,7 @@ int main(int argc, char* argv[])
         }
         Xcount = 0;
 
-        searchMax(population, numP, &best, &in);
+        searchMax(population, numP, &best, &in, fout);
 
 #if debug >= 1
         printf("\nCurrent Best solution stats:\n");
@@ -625,7 +631,7 @@ void changeConfMem(Vett *x, Instances *in)
     }
 }
 
-void searchMax(Vett *pop, int dim, Sol *best, Instances *in)
+void searchMax(Vett *pop, int dim, Sol *best, Instances *in, FILE *fout)
 // Scan population for best solution
 {
     int i;
@@ -636,6 +642,7 @@ void searchMax(Vett *pop, int dim, Sol *best, Instances *in)
             Vett2Sol(&pop[i], best, in);
         }
     }
+    bestWrite(best,in,fout);
 }
 
 
@@ -1028,7 +1035,8 @@ void cpySol(Vett *dst, Vett *src, Instances *in)
     }
 }
 
-void TS(Vett *best, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *neibest, int *neiworst, Instances *in)
+void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *neibest, int *neiworst,
+        Instances *in)
 {
     int c, q, i, iteration, j;
     int count;
@@ -1038,7 +1046,7 @@ void TS(Vett *best, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *n
     int flag=0;
     int tabu[2][8];                     //tabu list: 1 riga corrisponde ad una sostituzione che non pu� essere fatta
 
-    cpySol(temp, best, in);
+    cpySol(temp, localBest, in);
 
 #if debug >= 1
     if (temp->feasible != -2) {
@@ -1062,27 +1070,19 @@ void TS(Vett *best, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *n
     {
         count++;
 
-        for(c=0; c<in->C; c++)
-        {
-            chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
-        }
-
         for(i=0; i<numN; i++)
         {
             neibest[i]=-1;      //memorizza gli indici da cui creare i neighbor: indici migliori non attivi
             neiworst[i]=-1;     //memorizza gli indici da cui creare i neighbor: indici peggiori attivi
         }
 
-        for(c=0; c<in->C && temp->feasible==1; c++)   //se l'ultima soluzione era feasible, attiva tutte le configurazioni che costano 0
-        {
-            if(temp->eventualMemc[c]==0)
-            {
-                temp->Yc[c]=1;
-            }
-        }
-
         if(temp->feasible==1)    //cerco una sostituzione che aumenti il guadagno
         {
+
+            for(c=0; c<in->C; c++)
+            {
+                chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
+            }
             for(i=0; i<numN; i++)
             {
                 bestc=-1;
@@ -1169,6 +1169,10 @@ void TS(Vett *best, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *n
         {
             while(temp->feasible==0)
             {
+                for(c=0; c<in->C; c++)
+                {
+                    chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
+                }
 
                 for(i=0; i<numN; i++)
                 {
@@ -1254,19 +1258,17 @@ void TS(Vett *best, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *n
                 createZifromYc(temp, in);
                 check3(temp, in);
 
-                if(nof>=in->C)   // se non riesce a tornare feasible dopo C iterazioni, prova a disattivare qualche configurazione
+                if(nof>=20)   // se non riesce a tornare feasible dopo C iterazioni, prova a disattivare qualche configurazione
                 {
+                    nof=0;
                     while(temp->feasible==0)
                     {
                         worstVal=-1;
-                        for(flag=0, c=rand()%in->C;  flag<(in->C/4); c=rand()%in->C, flag++)
+                        for(c=rand()%in->C;  temp->Fc[c]==1; c=rand()%in->C);
+                        if(temp->Yc[c]==1)
                         {
-                            if(temp->Yc[c]==1)
-                            {
-                                temp->Yc[c]=0;
-                            }
+                            temp->Yc[c]=0;
                         }
-                        //changed[c]=count;
                         nof=0;
                         createZifromYc(temp, in);
                         check3(temp, in);
@@ -1296,47 +1298,49 @@ void TS(Vett *best, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *n
             fea=0;
         }
 
-        if(temp->gain > best->gain && temp->feasible==1)
+        if(temp->gain > localBest->gain && temp->feasible==1)   //salva la soluzione se � la migliore
         {
-            cpySol(soluz, temp, in);
-        }
+            cpySol(neighbor, temp, in);
 
-        iteration++;
+            bestVal=0;
+            bestc=0;
+
+            while(bestc>-1) //se ancora possibile attivare configurazioni che aumentano il gain senza raggiungere infeasibility, aggiungile
+            {
+                bestc=-1;
+                bestVal=0;
+                for(c=0;c<in->C; c++)
+                {
+                    if(neighbor->eventualGainc[c] > bestVal && neighbor->eventualMemc[c] < (in->M - neighbor->mem))
+                    {
+                        bestVal=neighbor->eventualGainc[c];
+                        bestc=c;
+                    }
+                    if(bestc>-1)
+                    {
+                        neighbor->Yc[bestc]=1;
+                        createSolution(neighbor,in);
+                    }
+                }
+            }
+            if(neighbor->gain > soluz->gain)
+            {
+                cpySol(soluz, neighbor, in);
+            }
+            if(soluz->gain > localBest->gain)
+            {
+                cpySol(localBest, soluz, in);
+            }
+        }
+        else
+        {
+            iteration++;
+        }
 
         if(count==7)
         {
             count=0;
         }
-
-        bestVal=0;
-        bestc=0;
-
-        while(bestc>-1) //se ancora possibile attivare configurazioni che aumentano il gain senza raggiungere infeasibility, aggiungile
-        {
-            bestc=-1;
-            bestVal=0;
-            for(c=0;c<in->C; c++)
-            {
-                if(soluz->eventualGainc[c] > bestVal && soluz->eventualMemc[c] < (in->M - soluz->mem))
-                {
-                    bestVal=soluz->eventualGainc[c];
-                    bestc=c;
-                }
-                if(bestc>-1)
-                {
-                    soluz->Yc[bestc]=1;
-                    createSolution(soluz,in);
-                }
-            }
-        }
-
-
-        cpySol(best, soluz, in);
-
-#if debug >= 1
-            printf("gain: %d feasible: %d\n", best->gain, best->feasible);
-#endif
-
 
     }
 }
@@ -1590,4 +1594,19 @@ void createSolution(Vett *x, Instances *in)
     configureC(x, in);
     eventualGainCalc(x, in);
     return;
+}
+
+void bestWrite(Sol *best, Instances *in, FILE *fout)
+{
+    int c,q;
+    rewind(fout);
+
+    for (c = 0; c < in->C; c++)
+    {
+        for (q = 0; q < in->Q; q++)
+        {
+            fprintf(fout,"%d ", best->Xcq[c][q]);
+        }
+        fprintf(fout,"\n");
+    }
 }

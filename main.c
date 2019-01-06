@@ -1,281 +1,86 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
-#include <string.h>
-#include <time.h>
+#include <windows.h>
+int var3;
+int i;
 
-#define true 1
-#define false 0
-
-typedef struct instances{
-    int Q, I, C, M;
-    int **Eci;
-    int *Fi, *Mi;
-    int **Gcq;
-} Instances;
-
-typedef struct sol{
-    int **Xcq;
-    //TODO: int *Yc; //Dobbiamo aggiungerlo?
-    int *Zi;
-    int mem;
-    int gain;
-
-}Sol;
-
-void initialization(FILE *fin, Instances *in, Sol *best, Sol *temp);
-void letturavet(int *v, FILE *fin, int r);
-void letturamat(int **m, FILE *fin, int r, int c);
-void calculateOF(Sol *temp, Instances *in);
-int check(Sol *temp, Instances *in);
-int check1(Sol *temp, Instances *in);
-int check2(Sol *temp, Instances *in);
-int check3(Sol *temp, Instances *in);
-Sol solGen(Sol *temp, Instances *in); //TODO
-
-int main(int argc, char* argv[])
-{
-    Instances in;
-    Sol best, temp;
-    FILE *fin, *fout;
-    time_t start=time(NULL);
-    int timelimit=0;
-
-    assert(argc == 4);
-
-    assert(strcmp(argv[2], "-t") == 0);
-
-    timelimit = atoi(argv[3]);
-
-    fin = fopen(argv[1], "r");
-
-    assert(fin != NULL);
-
-    initialization(fin, &in, &best, &temp);
-
-
-    while ((time(NULL) - start)<timelimit){
-
-    }
-    /*
-        while(clock()<30000){}
-    */
-
-    //TODO: Ricordiamoci delle free
-
-    return 0;
+struct variabili{
+    int x;
+    int y;
+    int z;
+};
+int diff(int x, int y){
+    return x-y;
 }
 
-void initialization(FILE *fin, Instances *in, Sol *best, Sol *temp)
+DWORD WINAPI GeneticA(struct variabili *tr1)
 {
-    char lecture[40];
-    int c=0;
+    FILE *fp;
+    fp=fopen("output.txt","w");
+    int var1,var2;
+    var1=50;
+    var2=30;
+    var3 = diff(var1,var2);
+    tr1->z=tr1->x*tr1->y;
+    while(1) {
+        fprintf(fp,"ciaone1");
+        rewind(fp);
+        printf("eseguo genetic %d\n", i);
+        i++;
+        Sleep(1000);
 
-    assert( (fscanf(fin, "%s %d", lecture, &in->Q)) != EOF );
-    assert( (fscanf(fin, "%s %d", lecture, &in->I)) != EOF );
-    assert( (fscanf(fin, "%s %d", lecture, &in->C)) != EOF );
-    assert( (fscanf(fin, "%s %d", lecture, &in->M)) != EOF );
-
-    assert((in->Eci=malloc(in->C*sizeof(int*))) != NULL);
-
-    for(c=0; c<in->C; c++)
-    {
-        assert( (in->Eci[c]=malloc(in->I*sizeof(int))) !=NULL  );
-    }
-
-    assert( (in->Fi = malloc(in->I*sizeof(int))) !=NULL );
-    assert( (in->Mi = malloc(in->I*sizeof(int))) !=NULL );
-
-    assert( (in->Gcq = malloc(in->C*sizeof(int*))) != NULL );
-
-    for(c=0; c<in->C; c++)
-    {
-        assert( (in->Gcq[c]=malloc(in->Q*sizeof(int))) !=NULL  );
-    }
-
-    assert( (best->Xcq = malloc(in->C*sizeof(int*))) != NULL);
-
-    for(c=0; c<in->C; c++)
-    {
-        assert( (best->Xcq[c]=malloc(in->Q*sizeof(int))) !=NULL  );
-    }
-
-    assert( (best->Zi = malloc(in->I*sizeof(int))) !=NULL );
-
-    assert( (temp->Xcq = malloc(in->C*sizeof(int*))) != NULL);
-
-    for(c=0; c<in->C; c++)
-    {
-        assert( (temp->Xcq[c]=malloc(in->Q*sizeof(int))) !=NULL  );
-    }
-
-    assert( (temp->Zi = malloc(in->I*sizeof(int))) !=NULL );
-
-    assert( (fscanf(fin, "%s", lecture)) != EOF );
-
-    letturamat(in->Eci, fin, in->C, in->I);
-
-    assert( (fscanf(fin, "%s", lecture)) != EOF );
-
-    letturavet(in->Fi, fin, in->I);
-
-    assert( (fscanf(fin, "%s", lecture)) != EOF );
-
-    letturavet(in->Mi, fin, in->I);
-
-    assert( (fscanf(fin, "%s", lecture)) != EOF );
-
-    letturamat(in->Gcq, fin, in->C, in->Q);
-
-
-
-    return;
-}
-
-void letturavet(int *v, FILE *fin, int r)
-{
-    int i;
-
-    for(i=0; i<r; i++)
-    {
-       assert(fscanf(fin,"%d", &v[i]) != EOF);
-    }
-    return;
-}
-
-void letturamat(int **m, FILE *fin,int r, int c)
-{
-    int i,j;
-
-    for(i=0; i<r; i++)
-    {
-        for(j=0; j<c; j++)
-        {
-            assert(fscanf(fin,"%d", &m[i][j]) != EOF);
-        }
-    }
-    return;
-}
-
-void calculateOF(Sol *temp, Instances *in)
-{
-    int i, j, gain=0, cost=0;
-
-    for (i=0; i<in->C; i++) {
-        for (j=0; j<in->Q; j++) {
-            if (temp->Xcq[i][j] == 1) {
-                gain += in->Gcq[i][j];
-            }
-        }
-    }
-
-    for (i=0; i<in->I; i++) {
-        if (temp->Zi[i] == 1) {
-            cost += in->Fi[i];
-        }
-    }
-
-    temp->gain = (gain-cost);
-}
-
-//int check(Sol *temp, Instances *in)
-//// Returns 1 if temp is feasible, 0 otherwise.
-//{
-//    int c, q;
-//    int con2=0;
-//
-//    //Constraint (2)
-//    for(q=0; q<in->Q; q++)
-//    {
-//        con2=0;
-//        for(c=0; c<in->C; c++)
-//        {
-//            con2+=temp->Xcq[c][q];
-//        }
-//        if(con2>1)
-//        {
-//            return 0;
-//        }
-//    }
-//
-//    //Constraint (3)
-//    if(temp->mem > in->M)
-//    {
-//        return 0;
-//    }
-//    return 1;
-//}
-
-int check(Sol *temp, Instances *in)
-// Returns 1 if temp is feasible, 0 otherwise.
-{
-    if (check1(temp,in) > 0 ||
-        check2(temp,in) > 0 ||
-        check3(temp,in) >0) {
-        return 1;
-    } else {
-        return 0;
     }
 }
 
-int check1(Sol *temp, Instances *in)
-// check constraint 1
-// returns the number of indexes that should be present and are not, scaled by a factor.
+DWORD WINAPI TabuSearch(struct variabili *tr2)
 {
-    int c, q, i;
-    int p1=0;
-    //TODO: aggiungere fattore di scalamento
-
-    for (c=0; c<in->C; c++) {                                       //TODO: eventualmente da riscrivere usando Yc
-        for (q=0; q<in->Q; q++) {
-            if (temp->Xcq[c][q] == 1) {
-                for (i=0; i<in->I; i++) {
-                    if (in->Eci[c][i] == 1 && temp->Zi == 0) {
-                        p1++;
-                    }
-                }
-            }
-        }
-
+    FILE *fp;
+    fp=fopen("output.txt","w");
+    tr2->z=tr2->x*tr2->y;
+    while(1) {
+        fprintf(fp,"ciaone2");
+        printf("eseguo tabu %d\n", i);
+        rewind(fp);
+        i++;
+        Sleep(1000);
     }
-
-    return p1;
 }
+int main(int argc, char*argv[]) {
+    int t=10;
+    t=t*1000; //da secondi a millisecondi
+    struct variabili tr1,tr2;
+    tr1.x=5;
+    tr1.y=3;
+    tr2.x=8;
+    tr2.y=2;
+    HANDLE thread1 = CreateThread(NULL,//attributo sicurezza
+                                  0,//dimensione stack default
+                                  (LPTHREAD_START_ROUTINE)GeneticA,//funzione thread
+                                  &tr1,//argomento thread
+                                  0,//flag creazione
+                                  NULL//ritorno thread
+    );
 
-int check2(Sol *temp, Instances *in)
-// check constraint 2
-// returns 0 if every query has at most one configuration associated, otherwise it returns a value grater then 0, scaled by a factor.
-{
-    int q, c;
-    int p2, p2max=0;
-    //TODO: aggiungere fattore di scalamento
+    HANDLE thread2 = CreateThread(NULL,//attributo sicurezza
+                                  0,//dimensione stack default
+                                  (LPTHREAD_START_ROUTINE)TabuSearch,//funzione thread
+                                  &tr2,//argomento thread
+                                  0,//flag creazione
+                                  NULL//ritorno thread
+    );
+    //lettura del file e caricamento della struttura dati->
+    Sleep(t);
+    printf("termino thread1\n");
+    TerminateThread(thread1, 0);
 
-    for(q=0; q<in->Q; q++)
-    {
-        p2=0;
-        for(c=0; c<in->C; c++)
-        {
-            p2+=temp->Xcq[c][q];
-        }
-        if(p2>p2max)
-        {
-            p2max=p2;
-        }
-    }
-
-    return p2max - 1;
-}
-
-int check3(Sol *temp, Instances *in)
-// check constraint 3
-// returns 0 if limit M is not exceeded, otherwise it returns the excess amount, scaled by a factor.
-{
-    //TODO: aggiungere fattore di scalamento
-
-    if(temp->mem > in->M)
-    {
-        return temp->mem - in->M;
-    }
-
+    Sleep(5000);
+    printf("termino thread2\n");
+    TerminateThread(thread2, 0);
+    printf("programma terminato con %d e %d",tr1.z,tr2.z);
+    //alla return del programma chiamante i thread sembra che smettano di girare ma non ne sono sicuro, nel dubbio
+    //si chiudono a mano
+    // eventuali free e termine del programma vanno fatte qui poichè i thread vengono chiusi senza preavviso.
+    //Variabili allocate dinamicamente dentro al thread non ho idea di come farci una free prima di uscire.
+    //Suppongo che nel momento in cui vengano terminati i thread implicitamente le free vengano fatte
     return 0;
 }

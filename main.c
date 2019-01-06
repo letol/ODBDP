@@ -9,7 +9,7 @@
 #define numP 50
 #define debug 1
 #define probOffset .01
-#define TSiter 5
+#define TSiter 50
 #define numN 5      //dimensione del nighborhood
 
 
@@ -1047,6 +1047,7 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
     int tabu[2][8];                     //tabu list: 1 riga corrisponde ad una sostituzione che non pu� essere fatta
 
     cpySol(temp, localBest, in);
+    cpySol(soluz, localBest, in);
 
 #if debug >= 1
     if (temp->feasible != -2) {
@@ -1207,7 +1208,7 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
                     neighbor->Yc[c]=temp->Yc[c];
                 }
 
-                bestVal=1000000;
+                bestVal=-10000000;
 
                 for(i=0; i<numN; i++)
                 {
@@ -1232,9 +1233,9 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
                                     createVettXfromYc(neighbor, in);
                                     createZi(neighbor, in);
                                     calculateOF(neighbor, in);
-                                    if(neighbor->mem < bestVal)
+                                    if(neighbor->gain > bestVal)     //se il gain del neigh � il maggiore salva i 2 indici
                                     {
-                                        bestVal=neighbor->mem;
+                                        bestVal=neighbor->gain;
                                         bestc=neibest[i];
                                         worst=neiworst[j];
                                     }
@@ -1302,40 +1303,36 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
         {
             cpySol(neighbor, temp, in);
 
-            bestVal=0;
-            bestc=0;
+            bestVal = 0;
+            bestc = 0;
 
             while(bestc>-1) //se ancora possibile attivare configurazioni che aumentano il gain senza raggiungere infeasibility, aggiungile
             {
-                bestc=-1;
-                bestVal=0;
-                for(c=0;c<in->C; c++)
-                {
-                    if(neighbor->eventualGainc[c] > bestVal && neighbor->eventualMemc[c] < (in->M - neighbor->mem))
-                    {
-                        bestVal=neighbor->eventualGainc[c];
-                        bestc=c;
+                bestc = -1;
+                bestVal = 0;
+                for (c = 0; c < in->C; c++) {
+                    if (neighbor->eventualGainc[c] > bestVal && neighbor->eventualMemc[c] < (in->M - neighbor->mem)) {
+                        bestVal = neighbor->eventualGainc[c];
+                        bestc = c;
                     }
-                    if(bestc>-1)
-                    {
-                        neighbor->Yc[bestc]=1;
-                        createSolution(neighbor,in);
+                    if (bestc > -1) {
+                        neighbor->Yc[bestc] = 1;
+                        createSolution(neighbor, in);
                     }
                 }
             }
-            if(neighbor->gain > soluz->gain)
-            {
+            if (neighbor->gain > soluz->gain) {
                 cpySol(soluz, neighbor, in);
             }
-            if(soluz->gain > localBest->gain)
-            {
+            if (soluz->gain > localBest->gain) {
                 cpySol(localBest, soluz, in);
+#if debug >= 0
+                printf("\nTS\ngain: %d\nmemory: %d\nfeasible: %d", soluz->gain, soluz->mem, soluz->feasible);
+#endif
             }
         }
-        else
-        {
-            iteration++;
-        }
+
+        iteration++;
 
         if(count==7)
         {

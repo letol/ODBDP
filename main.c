@@ -14,6 +14,7 @@ typedef struct instances{
     int **Eci;
     int *Fi, *Mi;
     int **Gcq;
+    char *name;
 } Instances;
 
 typedef struct sol{
@@ -53,9 +54,37 @@ Sol best;
 void mainInitialization(FILE *fin, Instances *in, Sol *best);
 void letturavet(int *v, FILE *fin, int r);
 void letturamat(int **m, FILE *fin, int r, int c);
+void bestWrite(Sol *best, Instances *in);
+char *GetFileName(const char *path);
 
-void GAinitialization(Instances *in, Vett *pop, Vett *temp, Vett *selectedParents, Vett *children, Vett *soluz,
-                      Vett *neighbor, int **chosen, int **neibest, int **neiworst);
+
+void TSinit(Vett *pop, Instances *in);
+void TSdataInit(Vett *neighbor, Vett *temp, Sol *solu, Sol *TSbest, Instances *in);
+void createZi(Vett *v, Instances *in);
+int check3(Vett *v, Instances *in);
+
+void eventualMemCalc(Vett *x, Instances *in);   //calcolo vettore eventualMemc
+void changeFc(Vett *x, Instances *in);          //calcolo vettore Fc
+void changeGainC(Vett *x, Instances *in);       //calcolo vettore actualGainc
+void actualMemCalc(Vett *temp, Instances *in);  //calcolo vettore actualMemc
+void configureC(Vett *x, Instances *in);        //richiama le 4 funzioni precedenti
+
+void calculateOF(Vett *v, Instances *in);
+
+void createYc(Vett *temp, Instances *in);       //crea Yc da vettX
+void createVettXfromYc(Vett *x, Instances *in); //crea vettX da Yc
+void createZifromYc(Vett *v, Instances *in);    //crea Zi da Yc
+
+void eventualGainCalc(Vett *temp, Instances *in);       //calcolo vettore eventualGainc
+int evaluateGain(int c, Vett *temp, Instances *in);     //calcolo elemento vettore eventualGainc
+
+void Vett2Sol(Vett *v, Sol *s, Instances *in);          //da Vett a Sol
+void createSolution(Vett *x, Instances *in);            //richiama le funzioni necessarie per costruire la soluzione a partire da Yc
+void cpyVett(Vett *v1, Vett *v2, Instances *in);
+
+
+void GAdataInit(Instances *in, Vett *pop, Vett *temp, Vett *selectedParents, Vett *children, Vett *soluz,
+                Vett *neighbor, int **chosen, int **neibest, int **neiworst);
 void GAinit(Vett *pop, Instances *in);
 void searchMax(Vett *pop, int dim, Sol *best, Instances *in);
 void calculateFitness(Vett *v, Instances *in);
@@ -63,15 +92,18 @@ void mutation(Vett *v, Instances *in);
 void selectParents(Vett *pop, Vett *selPar, Instances *in);
 void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in);
 void sobstitute(Vett *pop, Vett *children, Instances *in);
+void calculateC(Vett *v, Instances *in);
+void calculateR(Vett *v, Instances *in);
+void cpySol(Vett *dst, Vett *src, Instances *in);
+void changeConfMem(Vett *x, Instances *in);
+void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *neibest, int *neiworst,
+        Instances *in);
 
 
 DWORD WINAPI Hybrid(Instances *in)
 {
-    FILE *fout;
-    fout=fopen("output.txt","w");
-    assert(fout != NULL);
-
     int j, c, q, i, iteration=0, Xcount=0;
+    Sol algBest;
     Vett population[numP], temp;
     Vett selectedParents[numP/2], children[numP/2];
 
@@ -82,40 +114,38 @@ DWORD WINAPI Hybrid(Instances *in)
     //srand((unsigned int)time(NULL)); //per aumentare casualità quando non siamo in debug
 #endif
 
-    GAinitialization(in, population, &temp, selectedParents, children,
-                     &soluz, &neighbor, &chosen, &neibest, &neiworst);
+    GAdataInit(in, population, &temp, selectedParents, children,
+               &soluz, &neighbor, &chosen, &neibest, &neiworst);
 
     GAinit(population, in);
 
 #if debug >= 2
-    printf("INITIAL POPULATION\n\n");
+    printf("HYB: INITIAL POPULATION\n\n ");
     for(j=0; j<numP; j++)
     {
-        printf("\n");
+        printf("\nHYB: ");
         for(q=0; q<in.Q; q++)
         {
             printf("%d ", population[j].vettX[q]);
         }
-        printf("\nvettore zi%d\n ", j);
+        printf("\nHYB: vettore zi%d\nHYB: ", j);
         for(i=0; i<in.I; i++)
         {
             printf("%d ", population[j].Zi[i]);
         }
-        printf("\nvettore c%d\n ", j);
+        printf("\nHYB: vettore c%d\nHYB: ", j);
         for(i=0; i<in.I; i++)
         {
             printf("%f ", population[j].vettC[i]);
         }
-        printf("\nvettore r%d\n ", j);
+        printf("\nHYB: vettore r%d\nHYB: ", j);
         for(i=0; i<in.I; i++)
         {
             printf("%f ", population[j].vettR[i]);
         }
-        printf("\ngain: %d\nmemory: %d\nfeasible:%d \n", population[j].gain, population[j].mem,population[j].feasible);
+        printf("\nHYB: gain: %d\nHYB: memory: %d\nHYB: feasible:%d \n", population[j].gain, population[j].mem,population[j].feasible);
     }
 #endif
-
-    best.gain=0;
 
     searchMax(population, numP, &best, in);
 
@@ -124,36 +154,38 @@ DWORD WINAPI Hybrid(Instances *in)
         mutation(&population[i], in);
     }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
     while (1) {
         selectParents(population, selectedParents, in);
-#if debug >= 1
-        printf("\nSELECTED PARENTS\n");
+#if debug >= 2
+        printf("\nHYB: SELECTED PARENTS\n");
         for (j = 0; j < numP / 2; j++) {
             if (selectedParents[j].feasible != -2) {
-                printf("\nP%d\n", j);
-                for (q = 0; q < in.Q; q++) {
+                printf("\nHYB: P%d\nHYB: ", j);
+                for (q = 0; q < in->Q; q++) {
                     printf("%d ", selectedParents[j].vettX[q]);
                 }
-                printf("\nvettore zi%d\n ", j);
-                for (i = 0; i < in.I; i++) {
+                printf("\nHYB: vettore zi%d\nHYB: ", j);
+                for (i = 0; i < in->I; i++) {
                     printf("%d ", selectedParents[j].Zi[i]);
                 }
-                printf("\nvettore c%d\n ", j);
-                for (i = 0; i < in.Q; i++) {
+                printf("\nHYB: vettore c%d\nHYB: ", j);
+                for (i = 0; i < in->Q; i++) {
                     printf("%f ", selectedParents[j].vettC[i]);
                 }
-                printf("\nvettore r%d\n ", j);
-                for (i = 0; i < in.Q; i++) {
+                printf("\nHYB: vettore r%d\nHYB: ", j);
+                for (i = 0; i < in->Q; i++) {
                     printf("%f ", selectedParents[j].vettR[i]);
                 }
-                printf("\ngain: %d\nmemory: %d\nfeasible:%d \n", selectedParents[j].gain, selectedParents[j].mem,
+                printf("\nHYB: gain: %d\nHYB: memory: %d\nHYB: feasible:%d \n", selectedParents[j].gain, selectedParents[j].mem,
                        selectedParents[j].feasible);
             }
         }
 #endif
 
-#if debug >= 1
-        printf("\nCROSSOVER & MUTATION\n");
+#if debug >= 2
+        printf("\nHYB: CROSSOVER & MUTATION\n");
 #endif
         for (i = 0; i < numP / 2; i++) {
             children[i].feasible = -2;
@@ -167,31 +199,31 @@ DWORD WINAPI Hybrid(Instances *in)
                         crossover(&selectedParents[i], &selectedParents[j], &children[i], &children[j], in);
                         Xcount++;
 
-                        createYc(&children[i], &in);
-                        createZi(&children[i], &in);
-                        calculateOF(&children[i], &in);
-                        check3(&children[i], &in);
-                        configureC(&children[i], &in);
-                        eventualGainCalc(&children[i], &in);
+                        createYc(&children[i], in);
+                        createZi(&children[i], in);
+                        calculateOF(&children[i], in);
+                        check3(&children[i], in);
+                        configureC(&children[i], in);
+                        eventualGainCalc(&children[i], in);
 
-                        TS(&children[i], &temp, &soluz, &neighbor, chosen, neibest, neiworst, &in);
+                        TS(&children[i], &temp, &soluz, &neighbor, chosen, neibest, neiworst, in);
 
-                        calculateC(&children[i], &in);
-                        calculateR(&children[i], &in);
+                        calculateC(&children[i], in);
+                        calculateR(&children[i], in);
                         calculateFitness(&children[i], in);
 
 
-                        createYc(&children[j], &in);
-                        createZi(&children[j], &in);
-                        calculateOF(&children[j], &in);
-                        check3(&children[j], &in);
-                        configureC(&children[j], &in);
-                        eventualGainCalc(&children[j], &in);
+                        createYc(&children[j], in);
+                        createZi(&children[j], in);
+                        calculateOF(&children[j], in);
+                        check3(&children[j], in);
+                        configureC(&children[j], in);
+                        eventualGainCalc(&children[j], in);
 
-                        TS(&children[j], &temp, &soluz, &neighbor, chosen, neibest, neiworst, &in);
+                        TS(&children[j], &temp, &soluz, &neighbor, chosen, neibest, neiworst, in);
 
-                        calculateC(&children[j], &in);
-                        calculateR(&children[j], &in);
+                        calculateC(&children[j], in);
+                        calculateR(&children[j], in);
                         calculateFitness(&children[j], in);
                     }
                     j++;
@@ -200,27 +232,27 @@ DWORD WINAPI Hybrid(Instances *in)
             i++;
         }
 
-#if debug >= 1
-        printf("\nPRODUCED CHILDREN\n");
+#if debug >= 2
+        printf("\nHYB: PRODUCED CHILDREN\n");
         for (j = 0; j < numP / 2; j++) {
             if (children[j].feasible != -2) {
-                printf("\nC%d\n", j);
-                for (q = 0; q < in.Q; q++) {
+                printf("\nHYB: C%d\nHYB: ", j);
+                for (q = 0; q < in->Q; q++) {
                     printf("%d ", children[j].vettX[q]);
                 }
-                printf("\nvettore zi%d\n ", j);
-                for (i = 0; i < in.I; i++) {
+                printf("\nHYB: vettore zi%d\nHYB: ", j);
+                for (i = 0; i < in->I; i++) {
                     printf("%d ", children[j].Zi[i]);
                 }
-                printf("\nvettore c%d\n ", j);
-                for (i = 0; i < in.Q; i++) {
+                printf("\nHYB: vettore c%d\nHYB: ", j);
+                for (i = 0; i < in->Q; i++) {
                     printf("%f ", children[j].vettC[i]);
                 }
-                printf("\nvettore r%d\n ", j);
-                for (i = 0; i < in.Q; i++) {
+                printf("\nHYB: vettore r%d\nHYB: ", j);
+                for (i = 0; i < in->Q; i++) {
                     printf("%f ", children[j].vettR[i]);
                 }
-                printf("\ngain: %d\nmemory: %d\nfeasible:%d \n", children[j].gain, children[j].mem,
+                printf("\nHYB: gain: %d\nHYB: memory: %d\nHYB: feasible:%d \n", children[j].gain, children[j].mem,
                        children[j].feasible);
             }
         }
@@ -233,8 +265,8 @@ DWORD WINAPI Hybrid(Instances *in)
 
         //If no crossover happened, apply mutation over population
         if (Xcount == 0) {
-#if debug >= 1
-            printf("\nNO CROSSOVER -> ONLY MUTATION\n");
+#if debug >= 2
+            printf("\nHYB: NO CROSSOVER -> ONLY MUTATION\n");
 #endif
             for (i = 0; i < numP; i++) {
                 mutation(&population[i], in);
@@ -242,71 +274,72 @@ DWORD WINAPI Hybrid(Instances *in)
 #if debug >= 2
             for(j=0; j<numP; j++)
             {
-                printf("\n");
+                printf("\nHYB: ");
                 for(q=0; q<in.Q; q++)
                 {
                     printf("%d ", population[j].vettX[q]);
                 }
-                printf("\nvettore zi%d\n ", j);
+                printf("\nHYB: vettore zi%d\nHYB: ", j);
                 for(i=0; i<in.I; i++)
                 {
                     printf("%d ", population[j].Zi[i]);
                 }
-                printf("\nvettore c%d\n ", j);
+                printf("\nHYB: vettore c%d\nHYB: ", j);
                 for(i=0; i<in.Q; i++)
                 {
                     printf("%f ", population[j].vettC[i]);
                 }
-                printf("\nvettore r%d\n ", j);
+                printf("\nHYB: vettore r%d\nHYB: ", j);
                 for(i=0; i<in.Q; i++)
                 {
                     printf("%f ", population[j].vettR[i]);
                 }
-                printf("\ngain: %d\nmemory: %d\nfeasible:%d \n", population[j].gain, population[j].mem,population[j].feasible);
+                printf("\nHYB: gain: %d\nHYB: memory: %d\nHYB:feasible:%d \n", population[j].gain, population[j].mem,population[j].feasible);
             }
 #endif
         }
+
         Xcount = 0;
 
         searchMax(population, numP, &best, in);
+
     }
+#pragma clang diagnostic pop
 
     return 0;
 }
 
 DWORD WINAPI TabuSearch(Instances *in)
 {
-    FILE *fout;
-    fout=fopen("output.txt","w");
-    assert(fout != NULL);
-
     int c, q, i, iteration=0,j;
     int count;
-    Vett temp, soluz, neighbor;
+    Vett temp, neighbor;
+    Sol soluz, TSbest;
     int bestc, worst;
     int bestVal, worstVal;
     int nof=0, fea=0;
     int flag=0;
     int *chosen, *neibest, *neiworst;
     int tabu[2][8];                     //tabu list: 1 riga corrisponde ad una sostituzione che non pu� essere fatta
-    char file[50];
 
-    initialization(&soluz, &neighbor, &temp, &in, NULL, NULL, NULL, NULL, NULL, NULL);
-
+    TSdataInit(&neighbor, &temp, &soluz, &TSbest, in);
     assert( (neibest = malloc(numN*sizeof(int))) != NULL);
     assert( (neiworst = malloc(numN*sizeof(int))) != NULL);
-    assert( (chosen = malloc(in.C*sizeof(int))) != NULL);
+    assert( (chosen = malloc(in->C*sizeof(int))) != NULL);
 
-    TSinit(&temp, &in);
+    TSinit(&temp, in);
 
     iteration=0;
 
     count=0;
 
-    Vett2Sol(&temp, &best, &in);
+    Vett2Sol(&temp, &TSbest, in);
+
     soluz.gain=0;
 
-    while ((time(NULL) - start)<=timelimit)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+    while (1)
     {
         count++;
 
@@ -319,7 +352,7 @@ DWORD WINAPI TabuSearch(Instances *in)
         if(temp.feasible==1)    //cerco una sostituzione che aumenti il guadagno
         {
 
-            for(c=0; c<in.C; c++)
+            for(c=0; c<in->C; c++)
             {
                 chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
             }
@@ -330,7 +363,7 @@ DWORD WINAPI TabuSearch(Instances *in)
                 worst=-1;
                 worstVal=1000000000;
 
-                for(c=0; c<in.C; c++)
+                for(c=0; c<in->C; c++)
                 {
                     if(temp.Yc[c]==0 && chosen[c]==0 && bestVal < temp.eventualGainc[c])    //se la configurazione non � attiva e l'eventuale guadagno � il pi� alto memorizza l'indice
                     {
@@ -350,7 +383,7 @@ DWORD WINAPI TabuSearch(Instances *in)
                 chosen[worst]=1;
             }
 
-            for(c=0;c<in.C; c++)    //copia del vettore Yc della prima soluzione sul neighbor
+            for(c=0;c<in->C; c++)    //copia del vettore Yc della prima soluzione sul neighbor
             {
                 neighbor.Yc[c]=temp.Yc[c];
             }
@@ -378,9 +411,9 @@ DWORD WINAPI TabuSearch(Instances *in)
 
                                 neighbor.Yc[neibest[i]]=1;
                                 neighbor.Yc[neiworst[j]]=0;
-                                createVettXfromYc(&neighbor, &in);
-                                createZi(&neighbor, &in);
-                                calculateOF(&neighbor, &in);
+                                createVettXfromYc(&neighbor, in);
+                                createZi(&neighbor, in);
+                                calculateOF(&neighbor, in);
                                 if(neighbor.gain > bestVal)     //se il gain del neigh � il maggiore salva i 2 indici
                                 {
                                     bestVal=neighbor.gain;
@@ -409,7 +442,7 @@ DWORD WINAPI TabuSearch(Instances *in)
         {
             while(temp.feasible==0)
             {
-                for(c=0; c<in.C; c++)
+                for(c=0; c<in->C; c++)
                 {
                     chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
                 }
@@ -421,7 +454,7 @@ DWORD WINAPI TabuSearch(Instances *in)
                     worstVal=-1;
                     worst=-1;
 
-                    for(c=0; c<in.C; c++)
+                    for(c=0; c<in->C; c++)
                     {
                         if(temp.Yc[c]==0 && chosen[c]==0 && bestVal > temp.eventualMemc[c] && temp.eventualMemc!=0)
                         {
@@ -442,12 +475,12 @@ DWORD WINAPI TabuSearch(Instances *in)
                 }
 
 
-                for(c=0;c<in.C; c++)
+                for(c=0;c<in->C; c++)
                 {
                     neighbor.Yc[c]=temp.Yc[c];
                 }
 
-                bestVal=1000000;
+                bestVal=-10000000;
 
                 for(i=0; i<numN; i++)
                 {
@@ -469,12 +502,12 @@ DWORD WINAPI TabuSearch(Instances *in)
                                 {
                                     neighbor.Yc[neibest[i]]=1;
                                     neighbor.Yc[neiworst[j]]=0;
-                                    createVettXfromYc(&neighbor, &in);
-                                    createZi(&neighbor, &in);
-                                    calculateOF(&neighbor, &in);
-                                    if(neighbor.mem < bestVal)
+                                    createVettXfromYc(&neighbor, in);
+                                    createZi(&neighbor, in);
+                                    calculateOF(&neighbor, in);
+                                    if(neighbor.gain > bestVal)
                                     {
-                                        bestVal=neighbor.mem;
+                                        bestVal=neighbor.gain;
                                         bestc=neibest[i];
                                         worst=neiworst[j];
                                     }
@@ -495,8 +528,8 @@ DWORD WINAPI TabuSearch(Instances *in)
                 nof++;
                 fea=0;
 
-                createZifromYc(&temp, &in);
-                check3(&temp, &in);
+                createZifromYc(&temp, in);
+                check3(&temp, in);
 
                 if(nof>=20)   // se non riesce a tornare feasible dopo C iterazioni, prova a disattivare qualche configurazione
                 {
@@ -504,53 +537,52 @@ DWORD WINAPI TabuSearch(Instances *in)
                     while(temp.feasible==0)
                     {
                         worstVal=-1;
-                        for(c=rand()%in.C;  temp.Fc[c]==1; c=rand()%in.C);
+                        for(c=rand()%in->C; temp.Fc[c]==1; c=rand()%in->C);
+
+                        if(temp.Yc[c]==1)
                         {
-                            if(temp.Yc[c]==1)
-                            {
-                                temp.Yc[c]=0;
-                            }
+                            temp.Yc[c]=0;
                         }
                         nof=0;
-                        createZifromYc(&temp, &in);
-                        check3(&temp, &in);
+                        createZifromYc(&temp, in);
+                        check3(&temp, in);
                     }
 
                 }
             }
         }
 
-        createSolution(&temp,&in);  //crea la vett dalla Yc calcolata
+        createSolution(&temp,in);  //crea la vett dalla Yc calcolata
 
         if(fea>=5)  //se � feasible per 5 volte consecutive, prova a servire una query non servita e di conseguenza attivare una conf
         {
 
-            for(q=rand()%in.Q, flag=0; temp.vettX[q]==-1 && flag<in.Q; q=rand()%in.Q, flag++);
+            for(q=rand()%in->Q, flag=0; temp.vettX[q]==-1 && flag<in->Q; q=rand()%in->Q, flag++);
 
-            for(c=rand()%in.C, flag=0; flag<in.C; c=rand()%in.C, flag++)
+            for(c=rand()%in->C, flag=0; flag<in->C; c=rand()%in->C, flag++)
             {
-                if(in.Gcq[c][q]>0 && temp.Yc[c]==0)
+                if(in->Gcq[c][q]>0 && temp.Yc[c]==0)
                 {
                     temp.Yc[c]=1;
-                    flag=in.C;
+                    flag=in->C;
                 }
             }
-            createSolution(&temp,&in);
+            createSolution(&temp,in);
             fea=0;
         }
 
 
         if( (iteration%50) == 49)       //dopo 50 iterazioni senza trovare soluzioni migliori, reinizializza un'altra soluzione
         {
-            TSinit(&temp, &in);
+            TSinit(&temp, in);
             iteration=0;
             count=0;
         }
 
-        if(temp.gain > best.gain && temp.feasible==1)   //salva la soluzione se � la migliore
+        if(temp.gain > TSbest.gain && temp.feasible==1)   //salva la soluzione se � la migliore
         {
-            Vett2Sol(&temp, &best, &in);
-            cpyVett(&neighbor, &temp, &in);
+            Vett2Sol(&temp, &TSbest, in);
+            cpyVett(&neighbor, &temp, in);
 
             bestVal=0;
             bestc=0;
@@ -559,9 +591,9 @@ DWORD WINAPI TabuSearch(Instances *in)
             {
                 bestc=-1;
                 bestVal=0;
-                for(c=0;c<in.C; c++)
+                for(c=0;c<in->C; c++)
                 {
-                    if(neighbor.eventualGainc[c] > bestVal && neighbor.eventualMemc[c] < (in.M - neighbor.mem))
+                    if(neighbor.eventualGainc[c] > bestVal && neighbor.eventualMemc[c] < (in->M - neighbor.mem))
                     {
                         bestVal=neighbor.eventualGainc[c];
                         bestc=c;
@@ -569,14 +601,27 @@ DWORD WINAPI TabuSearch(Instances *in)
                     if(bestc>-1)
                     {
                         neighbor.Yc[bestc]=1;
-                        createSolution(&neighbor,&in);
+                        createSolution(&neighbor,in);
                     }
                 }
             }
             if(neighbor.gain > soluz.gain)
             {
-                cpyVett(&soluz, &neighbor, &in);
+                Vett2Sol(&neighbor, &soluz, in);
             }
+            if(soluz.gain > TSbest.gain)
+            {
+                Vett2Sol(&neighbor, &TSbest, in);
+            }
+            if(TSbest.gain > best.gain)
+            {
+                Vett2Sol(&neighbor, &best, in);
+                bestWrite(&TSbest, in);
+#if debug >= 1
+                printf("\nTS: gain: %d\nTS: memory: %d\nTS: feasible: %d\n", soluz.gain, soluz.mem, soluz.feasible);
+#endif
+            }
+
             iteration=0;
         }
         else
@@ -588,26 +633,9 @@ DWORD WINAPI TabuSearch(Instances *in)
         {
             count=0;
         }
-
     }
-
-    if(soluz.gain>best.gain)
-    {
-        Vett2Sol(&soluz, &best, &in);
-    }
-
-    sprintf(file, "%s_OMAMZ_group04.sol", argv[1]);
-
-    fout = fopen(file, "w+");
-
-    bestWrite(&best,&in,fout);
-
-    fclose(fout);
-
-    printf("\ngain: %d\nmemory: %d\nfeasible: %d", best.gain, best.mem, best.feasible);
 
     return 0;
-
 }
 
 int main(int argc, char*argv[]) {
@@ -619,13 +647,12 @@ int main(int argc, char*argv[]) {
 
     fin = fopen(argv[1], "r");
     assert(fin != NULL);
-
+    in.name = GetFileName(argv[1]);
     mainInitialization(fin, &in, &best);
 
     fclose(fin);
 
     best.gain=0;
-
     HANDLE thread1 = CreateThread(NULL,//attributo sicurezza
                                   0,//dimensione stack default
                                   (LPTHREAD_START_ROUTINE)Hybrid,//funzione thread
@@ -643,13 +670,11 @@ int main(int argc, char*argv[]) {
     );
     //lettura del file e caricamento della struttura dati->
     Sleep(timelimit);
-    printf("termino thread1\n");
+    printf("\nTERMINO THREAD 1\n");
     TerminateThread(thread1, 0);
-
-    Sleep(5000);
-    printf("termino thread2\n");
+    printf("\nTHERMINO THREAD 2\n");
     TerminateThread(thread2, 0);
-    printf("programma terminato\n");
+    printf("\nPROGRAMMA TERMINATO\n");
 
     printf("\nBest solution is:\n");
     for(c=0; c<in.C; c++)
@@ -743,9 +768,477 @@ void letturamat(int **m, FILE *fin,int r, int c)
     }
 }
 
+void TSinit(Vett *pop, Instances *in)
+{
+    int i, c, count;
+    int Memory;
+    pop->feasible=-1;
+    pop->gain=-1;
 
-void GAinitialization(Instances *in, Vett *pop, Vett *temp, Vett *selectedParents, Vett *children, Vett *soluz,
-                      Vett *neighbor, int **chosen, int **neibest, int **neiworst)
+
+    while(pop->feasible==0 || pop->gain <=0)
+    {
+        count=0;
+        Memory=in->M;
+
+        for(c=0; c<in->C; c++)
+        {
+            pop->eventualMemc[c]=0;
+
+            for(i=0; i<in->I; i++)
+            {
+                if(in->Eci[c][i]==1)
+                {
+                    pop->eventualMemc[c]+=in->Mi[i];
+                }
+            }
+        }
+
+        for(c=0; c<in->C;c++)
+        {
+            pop->Yc[c]=0;
+        }
+
+        for(c=rand()%in->C; count<(in->C/2); count++, c=rand()%in->C)
+        {
+            if( (Memory - pop->eventualMemc[c]) > 0)
+            {
+                pop->Yc[c]=1;
+
+                Memory-=pop->eventualMemc[c];
+                createZifromYc(pop, in);
+                eventualMemCalc(pop, in);
+            }
+        }
+        createSolution(pop, in);
+    }
+
+    for(c=0; c<in->C; c++)
+    {
+        if(pop->eventualMemc[c] <= Memory)
+        {
+            pop->Yc[c]=1;
+            Memory-=pop->eventualMemc[c];
+            createZifromYc(pop, in);
+            eventualMemCalc(pop, in);
+        }
+    }
+
+    createSolution(pop, in);
+
+    return;
+}
+
+void TSdataInit(Vett *neighbor, Vett *temp, Sol *solu, Sol *TSbest, Instances *in) {
+    int c;
+
+    assert( (temp->vettX = malloc(in->Q*sizeof(int))) != NULL);
+    assert( (temp->Zi = malloc(in->I*sizeof(int))) != NULL);
+    assert( (temp->Yc=malloc(in->C*sizeof(int))) != NULL);
+    assert( (temp->Fc=malloc(in->C*sizeof(int))) != NULL );
+    assert( (temp->eventualMemc=malloc(in->C*sizeof(int))) != NULL );
+    assert( (temp->actualMemc=malloc(in->C*sizeof(int))) != NULL );
+    assert( (temp->actualGainc=malloc(in->C*sizeof(int))) != NULL );
+    assert( (temp->eventualGainc=malloc(in->C*sizeof(int))) != NULL );
+
+    assert( (neighbor->vettX = malloc(in->Q*sizeof(int))) != NULL);
+    assert( (neighbor->Zi = malloc(in->I*sizeof(int))) != NULL);
+    assert( (neighbor->Yc=malloc(in->C*sizeof(int))) != NULL);
+    assert( (neighbor->Fc=malloc(in->C*sizeof(int))) != NULL );
+    assert( (neighbor->eventualMemc=malloc(in->C*sizeof(int))) != NULL );
+    assert( (neighbor->actualMemc=malloc(in->C*sizeof(int))) != NULL );
+    assert( (neighbor->actualGainc=malloc(in->C*sizeof(int))) != NULL );
+    assert( (neighbor->eventualGainc=malloc(in->C*sizeof(int))) != NULL );
+
+    assert( (solu->Xcq = malloc(in->C*sizeof(int*))) != NULL);
+
+    for(c=0; c<in->C; c++)
+    {
+        assert( (solu->Xcq[c]=malloc(in->Q*sizeof(int))) !=NULL  );
+    }
+
+    assert( (solu->Zi = malloc(in->I*sizeof(int))) !=NULL );
+
+
+    assert( (TSbest->Xcq = malloc(in->C*sizeof(int*))) != NULL);
+
+    for(c=0; c<in->C; c++)
+    {
+        assert( (TSbest->Xcq[c]=malloc(in->Q*sizeof(int))) !=NULL  );
+    }
+
+    assert( (TSbest->Zi = malloc(in->I*sizeof(int))) !=NULL );
+
+    return;
+}
+void createZi(Vett *v, Instances *in)
+{
+    int i, q;
+
+    for(i=0; i<in->I; i++)
+    {
+        v->Zi[i]=0;
+    }
+
+    for(q=0; q<in->Q; q++)
+    {
+        if(v->vettX[q]>=0)
+        {
+            for(i=0; i<in->I; i++)
+            {
+                if(in->Eci[v->vettX[q]][i]==1)
+                {
+                    v->Zi[i]=1;
+
+                }
+            }
+        }
+    }
+
+    return;
+}
+
+void eventualMemCalc(Vett *x, Instances *in) {
+
+    int i, c;
+
+    for (c = 0; c < in->C; c++)
+    {
+        x->eventualMemc[c] = 0;
+        for (i = 0; i < in->I; i++)
+        {
+            if (in->Eci[c][i] == 1 && x->Zi[i] == 0)
+            {
+                x->eventualMemc[c] += in->Mi[i];
+            }
+        }
+    }
+    return;
+}
+
+void changeFc(Vett *x, Instances *in)
+{
+    int i, c;
+
+    for (c = 0; c < in->C; c++)
+    {
+        x->Fc[c] = 0;
+        for (i = 0; i < in->I; i++)
+        {
+            if (in->Eci[c][i] == 1 && x->Zi[i] == 0)
+            {
+                x->Fc[c] += in->Fi[i];
+            }
+        }
+    }
+    return;
+}
+
+void changeGainC(Vett *x, Instances *in)
+{
+    int q,c,i;
+    int fc=0;
+
+    for(c=0;c<in->C; c++)
+    {
+        x->actualGainc[c]=0;
+    }
+
+
+    for(q=0; q<in->Q; q++)
+    {
+        if(x->vettX[q]>-1)
+        {
+            x->actualGainc[x->vettX[q]]+=in->Gcq[x->vettX[q]][q];
+        }
+    }
+
+    for(c=0; c<in->C; c++)
+    {
+        if(x->actualGainc[c]>0)
+        {
+            for(fc=0, i=0; i<in->I; i++)
+            {
+                if(in->Eci[c][i]==1)
+                {
+                    fc+=in->Fi[i];
+                }
+            }
+        }
+    }
+
+    return;
+}
+
+void actualMemCalc(Vett *temp, Instances *in)
+{
+    int i,c;
+
+    for(c=0; c<in->C; c++)
+    {
+        temp->actualMemc[c]=0;
+        for(i=0; i<in->I; i++)
+        {
+            if(in->Eci[c][i]==1 && temp->Zi[i]==1)
+            {
+                temp->actualMemc[c]+=in->Mi[i];
+            }
+        }
+    }
+    return;
+}
+void configureC(Vett *x, Instances *in)
+{
+
+    eventualMemCalc(x,in);
+
+    changeFc(x,in);
+
+    changeGainC(x,in);
+
+    actualMemCalc(x, in);
+
+    return;
+}
+int check3(Vett *v, Instances *in)
+{
+    int i;
+
+    v->mem=0;
+
+    for(i=0; i<in->I; i++)
+    {
+        if(v->Zi[i])
+        {
+            v->mem+=in->Mi[i];
+        }
+    }
+
+    if(v->mem > in->M)
+    {
+        v->feasible=0;
+    }
+    else
+    {
+        v->feasible=1;
+    }
+
+
+    return (in->M - v->mem);
+}
+void calculateOF(Vett *v, Instances *in)
+{
+    int q, i, gain=0, cost=0;
+    v->mem=0;
+
+    for (q=0; q<in->Q; q++)
+    {
+        if (v->vettX[q] >= 0)
+        {
+            gain += in->Gcq[v->vettX[q]][q];
+        }
+    }
+
+    for (i=0; i<in->I; i++)
+    {
+        if (v->Zi[i] == 1)
+        {
+            cost += in->Fi[i];
+            v->mem += in->Mi[i];
+        }
+    }
+
+    v->gain = (gain-cost);
+
+    return;
+}
+
+void createYc(Vett *temp, Instances *in)
+{
+    int q, c;
+
+    for(c=0; c<in->C; c++)
+    {
+        temp->Yc[c]=0;
+    }
+
+    for(q=0; q<in->Q; q++)
+    {
+        if(temp->vettX[q] > -1)
+        {
+            temp->Yc[temp->vettX[q]]=1;
+        }
+    }
+
+    return;
+}
+
+void createVettXfromYc(Vett *x, Instances *in)
+{
+    int c,q;
+
+    for(q=0; q<in->Q; q++)
+    {
+        x->vettX[q]=-1;
+    }
+
+    for(c=0;c<in->C; c++)
+    {
+        for(q=0; q<in->Q; q++)
+        {
+            if(x->vettX[q]!=-1)
+            {
+                if(x->Yc[c]==1 && in->Gcq[c][q] > in->Gcq[x->vettX[q]][q])
+                {
+                    x->vettX[q]=c;
+                }
+            }
+            else if( x->vettX[q]==-1 && x->Yc[c]==1 && in->Gcq[c][q]>0)
+            {
+                x->vettX[q]=c;
+            }
+        }
+    }
+    return;
+}
+
+void createZifromYc(Vett *v, Instances *in)
+{
+    int i, c;
+
+    for(i=0; i<in->I; i++)
+    {
+        v->Zi[i]=0;
+    }
+
+    for(c=0; c<in->C; c++)
+    {
+        if(v->Yc[c]==1)
+        {
+            for(i=0; i<in->I; i++)
+            {
+                if(in->Eci[c][i]==1)
+                {
+                    v->Zi[i]=1;
+                }
+            }
+        }
+    }
+
+    return;
+}
+
+void eventualGainCalc(Vett *temp, Instances *in)
+{
+    int c;
+
+    for(c=0; c<in->C; c++)
+    {
+        temp->eventualGainc[c]=evaluateGain(c, temp, in);
+    }
+
+    return;
+}
+
+int evaluateGain(int c, Vett *temp, Instances *in)
+{
+    int q;
+    int gain=0;
+
+    for(q=0;q<in->Q; q++)
+    {
+        if(temp->vettX[q]==-1 && in->Gcq[c][q]>0)
+        {
+            gain+=in->Gcq[c][q];
+        }
+        else if(temp->vettX[q] > -1)
+        {
+            if(in->Gcq[c][q] > in->Gcq[temp->vettX[q]][q])
+            {
+                gain+=in->Gcq[c][q] - in->Gcq[temp->vettX[q]][q];
+            }
+        }
+    }
+    return (gain- temp->Fc[c]);
+}
+
+
+
+void Vett2Sol(Vett *v, Sol *s, Instances *in)
+// Translate type Vett into type Sol solution
+{
+    int c, q, i;
+    for(c=0; c<in->C; c++){
+        for(q=0; q<in->Q; q++) {
+            if(c == v->vettX[q]) {
+                s->Xcq[c][q] = 1;
+            } else {
+                s->Xcq[c][q] = 0;
+            }
+        }
+    }
+
+    for(i=0;i<in->I;i++)
+    {
+        s->Zi[i] = v->Zi[i];
+    }
+
+    s->gain = v->gain;
+    s->mem = v->mem;
+    s->feasible = v->feasible;
+
+    return;
+}
+
+void createSolution(Vett *x, Instances *in)
+{
+    createVettXfromYc(x, in);
+    createYc(x, in);
+    createZi(x, in);
+    calculateOF(x, in);
+    check3(x, in);
+    configureC(x, in);
+    eventualGainCalc(x, in);
+    return;
+}
+
+void cpyVett(Vett *v1, Vett *v2, Instances *in)
+{
+    int c;
+
+    for(c=0; c<in->C; c++)
+    {
+        v1->Yc[c]=v2->Yc[c];
+    }
+    createSolution(v1,in);
+
+    return;
+}
+
+void bestWrite(Sol *best, Instances *in)
+{
+    int c,q;
+    FILE *fout;
+    char file[100];
+
+    sprintf(file, "%s_OMAMZ_group04.sol", in->name);
+    fout = fopen(file, "w+");
+
+    for (c = 0; c < in->C; c++)
+    {
+        for (q = 0; q < in->Q; q++)
+        {
+            fprintf(fout,"%d ", best->Xcq[c][q]);
+        }
+        fprintf(fout,"\n");
+    }
+    fprintf(fout,"\ngain: %d\nmemory: %d\nfeasible: %d", best->gain, best->mem, best->feasible);
+
+    fclose(fout);
+    return;
+}
+void GAdataInit(Instances *in, Vett *pop, Vett *temp, Vett *selectedParents, Vett *children, Vett *soluz,
+                Vett *neighbor, int **chosen, int **neibest, int **neiworst)
 {
     int c;
     for(c=0; c<numP; c++)
@@ -915,12 +1408,12 @@ void GAinit(Vett *pop, Instances *in)
         configureC(&pop[j], in);
         calculateOF(&pop[j], in);
         check3(&pop[j], in);
-#if debug >= 1
-        printf("configuzioni usate %d\n", numconf);
+#if debug >= 2
+        printf("HYB: configuzioni usate %d\n", numconf);
 #endif
         pop[j].availableMem = in->M - pop[j].mem;
-#if debug >= 1
-        printf("confmem %d\n", pop[j].availableMem);
+#if debug >= 2
+        printf("HYB: confmem %d\n", pop[j].availableMem);
 #endif
     }
 }
@@ -934,8 +1427,13 @@ void searchMax(Vett *pop, int dim, Sol *best, Instances *in)
         if(best->gain < pop[i].gain && pop[i].feasible==1)
         {
             Vett2Sol(&pop[i], best, in);
+            bestWrite(best,in);
+#if debug >= 1
+            printf("\nHYB: gain: %d\nHYB: memory: %d\nHYB: feasible: %d\n", best->gain, best->mem, best->feasible);
+#endif
         }
     }
+
 }
 
 void calculateFitness(Vett *v, Instances *in)
@@ -1140,4 +1638,418 @@ void sobstitute(Vett *pop, Vett *children, Instances *in)
             cpySol(&pop[i], &children[i], in);
         }
     }
+}
+
+void calculateC(Vett *v, Instances *in)
+// Calculates vettC from vettX - compatibility based: guardo quanti indici attivi ha in comune la configurazione con Zi corrente
+{
+    int q, i;
+    float compatibility;
+    int divisore;
+
+    for (q = 0; q < in->Q; q++) {
+        if (v->vettX[q] != -1) {
+            compatibility = 0;
+            divisore = 0;
+            for (i = 0; i < in->I; i++) {
+                if (v->Zi[i] == 1) {
+                    divisore++;
+                    if (in->Eci[v->vettX[q]][i] == v->Zi[i]) {
+                        compatibility ++;
+                    }
+                }
+            }
+            v->vettC[q] = (float) compatibility / divisore;
+        } else {
+            v->vettC[q] = 0;
+        }
+    }
+}
+
+void calculateR(Vett *v, Instances *in)
+// Calculates vettR from vettX
+{
+    int q, i;
+    int sum;
+
+    for(q=0; q<in->Q; q++) {
+        if(v->vettX[q] != -1) {
+            for (i = 0, sum = 0; i < in->I; i++) {
+                if (in->Eci[v->vettX[q]][i] == 1) {
+                    sum += in->Mi[i] + in->Fi[i];
+                }
+            }
+            v->vettR[q] = (float) in->Gcq[v->vettX[q]][q] / sum;
+        } else {
+            v->vettR[q] = 0;
+        }
+    }
+}
+
+void cpySol(Vett *dst, Vett *src, Instances *in)
+// Copy solution from src to dst
+{
+    int i;
+
+    dst->fitness = src->fitness;
+    dst->feasible = src->feasible;
+    dst->gain = src->gain;
+    dst->mem = src->mem;
+    dst->availableMem = src->availableMem;
+
+    for (i=0; i<in->Q; i++) {
+        dst->vettX[i] = src->vettX[i];
+        dst->vettC[i] = src->vettC[i];
+        dst->vettR[i] = src->vettR[i];
+    }
+
+    for (i=0; i<in->I; i++) {
+        dst->Zi[i] = src->Zi[i];
+    }
+
+    for (i=0; i<in->C; i++) {
+        dst->Yc[i] = src->Yc[i];
+        dst->Fc[i] = src->Fc[i];
+        dst->eventualMemc[i] = src->eventualMemc[i];
+        dst->actualMemc[i] = src->actualMemc[i];
+        dst->eventualGainc[i] = src->eventualGainc[i];
+        dst->actualGainc[i] = src->actualGainc[i];
+        dst->confmem[i] = src->confmem[i];
+    }
+}
+
+void changeConfMem(Vett *x, Instances *in)
+{
+    int i, j;
+
+    for(j=0; j<in->C; j++)
+    {
+        x->confmem[j]=0;
+        for(i=0; i<in->I; i++)
+        {
+            if(in->Eci[j][i]==1 && x->Zi[i]==0)
+            {
+                x->confmem[j]+=in->Mi[i];
+            }
+        }
+    }
+}
+
+void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, int *neibest, int *neiworst,
+        Instances *in)
+{
+    int c, q, i, iteration, j;
+    int count;
+    int bestc, worst;
+    int bestVal, worstVal;
+    int nof=0, fea=0;
+    int flag=0;
+    int tabu[2][8];                     //tabu list: 1 riga corrisponde ad una sostituzione che non pu� essere fatta
+
+    cpySol(temp, localBest, in);
+    cpySol(soluz, localBest, in);
+
+#if debug >= 2
+    if (temp->feasible != -2) {
+        printf("\nHYB: Starting child\nHYB: ");
+        for (q = 0; q < in->Q; q++) {
+            printf("%d ", temp->vettX[q]);
+        }
+        printf("\nHYB: vettore Yc\nHYB: ");
+        for (i = 0; i < in->C; i++) {
+            printf("%d ", temp->Yc[i]);
+        }
+        printf("\nHYB: gain: %d\nHYB: memory: %d\nHYB: feasible:%d \n", temp->gain, temp->mem, temp->feasible);
+    }
+#endif
+
+    iteration=0;
+
+    count=0;
+
+    while (iteration <= TSiter)
+    {
+        count++;
+
+        for(i=0; i<numN; i++)
+        {
+            neibest[i]=-1;      //memorizza gli indici da cui creare i neighbor: indici migliori non attivi
+            neiworst[i]=-1;     //memorizza gli indici da cui creare i neighbor: indici peggiori attivi
+        }
+
+        if(temp->feasible==1)    //cerco una sostituzione che aumenti il guadagno
+        {
+
+            for(c=0; c<in->C; c++)
+            {
+                chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
+            }
+            for(i=0; i<numN; i++)
+            {
+                bestc=-1;
+                bestVal=-1000000000;
+                worst=-1;
+                worstVal=1000000000;
+
+                for(c=0; c<in->C; c++)
+                {
+                    if(temp->Yc[c]==0 && chosen[c]==0 && bestVal < temp->eventualGainc[c])    //se la configurazione non � attiva e l'eventuale guadagno � il pi� alto memorizza l'indice
+                    {
+                        bestVal = temp->eventualGainc[c];
+                        bestc=c;
+                    }
+                    else if(temp->Yc[c]==1 && chosen[c]==0 && worstVal > temp->actualGainc[c])    //se la configurazione � attiva e il suo attuale guadagno � il peggiore, memorizza l'indice
+                    {
+                        worstVal=temp->actualGainc[c];
+                        worst=c;
+                    }
+                }
+
+                neibest[i]=bestc;
+                neiworst[i]=worst;
+                chosen[bestc]=1;
+                chosen[worst]=1;
+            }
+
+            for(c=0;c<in->C; c++)    //copia del vettore Yc della prima soluzione sul neighbor
+            {
+                neighbor->Yc[c]=temp->Yc[c];
+            }
+
+            bestVal=-1000000;
+
+            for(i=0; i<numN; i++)   //prova lo scambio tra tutti i possibili indici migliori con tutti gli indici peggiori
+            {
+                if(neibest[i]!=-1)
+                {
+                    for(j=0; j<numN; j++)
+                    {
+                        flag=1;
+                        if(neiworst[j]!=-1)
+                        {
+                            for(c=1;c<8;c++)    //cerca se lo scambio � presente nella tabu list
+                            {
+                                if( (tabu[0][c]==neibest[i] && tabu[1][c]==neiworst[j]) || (tabu[0][c]==neiworst[j] && tabu[1][c]==neibest[i]) )
+                                {
+                                    flag=0;
+                                }
+                            }
+                            if(flag==1)
+                            {
+
+                                neighbor->Yc[neibest[i]]=1;
+                                neighbor->Yc[neiworst[j]]=0;
+                                createVettXfromYc(neighbor, in);
+                                createZi(neighbor, in);
+                                calculateOF(neighbor, in);
+                                if(neighbor->gain > bestVal)     //se il gain del neigh � il maggiore salva i 2 indici
+                                {
+                                    bestVal=neighbor->gain;
+                                    bestc=neibest[i];
+                                    worst=neiworst[j];
+                                }
+                                neighbor->Yc[neibest[i]]=0;
+                                neighbor->Yc[neiworst[j]]=1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            temp->Yc[bestc]=1;
+            temp->Yc[worst]=0;
+
+            //printf("fea %d %d\n", worst, bestc);
+            tabu[0][count]=bestc;
+            tabu[1][count]=worst;
+            nof=0;
+            fea++;
+
+        }
+        else // cerca la soluzione con memoria minore fin quando non torna feasible. utilizza lo stesso procedimento di prima
+        {
+            while(temp->feasible==0)
+            {
+                for(c=0; c<in->C; c++)
+                {
+                    chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
+                }
+
+                for(i=0; i<numN; i++)
+                {
+                    bestVal=10000000;
+                    bestc=-1;
+                    worstVal=-1;
+                    worst=-1;
+
+                    for(c=0; c<in->C; c++)
+                    {
+                        if(temp->Yc[c]==0 && chosen[c]==0 && bestVal > temp->eventualMemc[c] && temp->eventualMemc!=0)
+                        {
+                            bestVal = temp->eventualMemc[c];
+                            bestc=c;
+                        }
+                        else if(temp->Yc[c]==1 && chosen[c]==0 && worstVal < temp->actualMemc[c])
+                        {
+                            worstVal=temp->actualMemc[c];
+                            worst=c;
+                        }
+                    }
+
+                    neibest[i]=bestc;
+                    neiworst[i]=worst;
+                    chosen[bestc]=1;
+                    chosen[worst]=1;
+                }
+
+
+                for(c=0;c<in->C; c++)
+                {
+                    neighbor->Yc[c]=temp->Yc[c];
+                }
+
+                bestVal=-10000000;
+
+                for(i=0; i<numN; i++)
+                {
+                    if(neibest[i]!=-1)
+                    {
+                        for(j=0; j<numN; j++)
+                        {
+                            flag=1;
+                            if(neiworst[j]!=-1)
+                            {
+                                for(c=1;c<=7;c++)
+                                {
+                                    if( (tabu[0][c]==neibest[i] && tabu[1][c]==neiworst[j]) || (tabu[0][c]==neiworst[j] && tabu[1][c]==neibest[i]) )
+                                    {
+                                        flag=0;
+                                    }
+                                }
+                                if(flag==1)
+                                {
+                                    neighbor->Yc[neibest[i]]=1;
+                                    neighbor->Yc[neiworst[j]]=0;
+                                    createVettXfromYc(neighbor, in);
+                                    createZi(neighbor, in);
+                                    calculateOF(neighbor, in);
+                                    if(neighbor->gain > bestVal)     //se il gain del neigh � il maggiore salva i 2 indici
+                                    {
+                                        bestVal=neighbor->gain;
+                                        bestc=neibest[i];
+                                        worst=neiworst[j];
+                                    }
+                                    neighbor->Yc[neibest[i]]=0;
+                                    neighbor->Yc[neiworst[j]]=1;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                temp->Yc[bestc]=1;
+                temp->Yc[worst]=0;
+
+                tabu[0][count]=bestc;
+                tabu[1][count]=worst;
+                //printf(" no fea %d %d\n", worst, bestc);
+                nof++;
+                fea=0;
+
+                createZifromYc(temp, in);
+                check3(temp, in);
+
+                if(nof>=20)   // se non riesce a tornare feasible dopo C iterazioni, prova a disattivare qualche configurazione
+                {
+                    nof=0;
+                    while(temp->feasible==0)
+                    {
+                        worstVal=-1;
+                        for(c=rand()%in->C;  temp->Fc[c]==1; c=rand()%in->C);
+                        if(temp->Yc[c]==1)
+                        {
+                            temp->Yc[c]=0;
+                        }
+                        nof=0;
+                        createZifromYc(temp, in);
+                        check3(temp, in);
+                    }
+
+                }
+            }
+        }
+
+        createSolution(temp,in);  //crea la vett dalla Yc calcolata
+
+        if(fea>=5)  //se � feasible per 5 volte consecutive, prova a servire una query non servita e di conseguenza attivare una conf
+        {
+
+            for(q=rand()%in->Q, flag=0; temp->vettX[q]==-1 && flag<in->Q; q=rand()%in->Q, flag++);
+
+            for(c=rand()%in->C, flag=0; flag<in->C; c=rand()%in->C, flag++)
+            {
+                if(in->Gcq[c][q]>0 && temp->Yc[c]==0)
+                {
+                    temp->Yc[c]=1;
+                    flag=in->C;
+                }
+            }
+            //changed[c]=count;
+            createSolution(temp,in);
+            fea=0;
+        }
+
+        if(temp->gain > localBest->gain && temp->feasible==1)   //salva la soluzione se � la migliore
+        {
+            cpySol(neighbor, temp, in);
+
+            bestVal = 0;
+            bestc = 0;
+
+            while(bestc>-1) //se ancora possibile attivare configurazioni che aumentano il gain senza raggiungere infeasibility, aggiungile
+            {
+                bestc = -1;
+                bestVal = 0;
+                for (c = 0; c < in->C; c++) {
+                    if (neighbor->eventualGainc[c] > bestVal && neighbor->eventualMemc[c] < (in->M - neighbor->mem)) {
+                        bestVal = neighbor->eventualGainc[c];
+                        bestc = c;
+                    }
+                    if (bestc > -1) {
+                        neighbor->Yc[bestc] = 1;
+                        createSolution(neighbor, in);
+                    }
+                }
+            }
+            if (neighbor->gain > soluz->gain) {
+                cpySol(soluz, neighbor, in);
+            }
+            if (soluz->gain > localBest->gain) {
+                cpySol(localBest, soluz, in);
+#if debug >= 2
+                printf("HYB: TS\nHYB: gain: %d\nHYB: memory: %d\nHYB: feasible: %d\n", soluz->gain, soluz->mem, soluz->feasible);
+#endif
+            }
+        }
+
+        iteration++;
+
+        if(count==7)
+        {
+            count=0;
+        }
+
+    }
+}
+
+// Returns filename portion of the given path
+// Returns empty string if path is directory
+char *GetFileName(const char *path)
+{
+    char *filename = strrchr(path, '\\');
+    if (filename == NULL)
+        filename = (char *) path;
+    else
+        filename++;
+    return filename;
 }

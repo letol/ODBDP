@@ -1227,11 +1227,13 @@ void bestWrite(Sol *best, Instances *in)
     {
         for (q = 0; q < in->Q; q++)
         {
-            fprintf(fout,"%d ", best->Xcq[c][q]);
+            fprintf(fout,"%d", best->Xcq[c][q]);
+            if(q< (in->Q - 1))
+                fprintf(fout," ");
         }
-        fprintf(fout,"\n");
+        if(c< (in->C - 1))
+            fprintf(fout,"\n");
     }
-    fprintf(fout,"\ngain: %d\nmemory: %d\nfeasible: %d", best->gain, best->mem, best->feasible);
 
     fclose(fout);
     return;

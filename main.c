@@ -7,7 +7,7 @@
 #include <math.h>
 #include <windows.h>
 
-#define debug 1
+#define debug 0
 
 typedef struct instances{
     int Q, I, C, M;
@@ -111,7 +111,7 @@ DWORD WINAPI Hybrid(Instances *in)
     int *chosen, *neibest, *neiworst;
 
 #if debug == 0
-    //srand((unsigned int)time(NULL)); //per aumentare casualità quando non siamo in debug
+    srand((unsigned int)time(NULL)); //per aumentare casualità quando non siamo in debug
 #endif
 
     GAdataInit(in, population, &temp, selectedParents, children,
@@ -154,8 +154,6 @@ DWORD WINAPI Hybrid(Instances *in)
         mutation(&population[i], in);
     }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
     while (1) {
         selectParents(population, selectedParents, in);
 #if debug >= 2
@@ -304,7 +302,6 @@ DWORD WINAPI Hybrid(Instances *in)
         searchMax(population, numP, &best, in);
 
     }
-#pragma clang diagnostic pop
 
     return 0;
 }
@@ -322,6 +319,10 @@ DWORD WINAPI TabuSearch(Instances *in)
     int *chosen, *neibest, *neiworst;
     int tabu[2][8];                     //tabu list: 1 riga corrisponde ad una sostituzione che non pu� essere fatta
 
+#if debug == 0
+    srand((unsigned int)time(NULL)); //per aumentare casualità quando non siamo in debug
+#endif
+
     TSdataInit(&neighbor, &temp, &soluz, &TSbest, in);
     assert( (neibest = malloc(numN*sizeof(int))) != NULL);
     assert( (neiworst = malloc(numN*sizeof(int))) != NULL);
@@ -337,8 +338,6 @@ DWORD WINAPI TabuSearch(Instances *in)
 
     soluz.gain=0;
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
     while (1)
     {
         count++;

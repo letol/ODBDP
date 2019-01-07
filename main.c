@@ -659,7 +659,7 @@ void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in)
         (sumR1 > 2 * sumR2 || sumR2 > 2 * sumR1)) {
             break;
         }
-        if (j < in->Q-1 && p1->vettR[j+1] > p2->vettR[j-1]) {
+        if (j < in->Q-1 && p1->vettR[j+1] > p2->vettR[j+1]) {
             j++;
             sumR1 += p1->vettR[j];
             sumR2 += p2->vettR[j];

@@ -7,7 +7,7 @@
 #include <math.h>
 #include <windows.h>
 
-#define debug 0
+#define debug 1
 
 typedef struct instances{
     int Q, I, C, M;
@@ -26,28 +26,28 @@ typedef struct sol{
 }Sol;
 
 typedef struct vett{
-    int *vettX;         //vettore soluzione
+    int *vettX;
     float *vettC;
     float *vettR;
     float fitness;
-    int mem;            //memoria usata
+    int mem;
     int *confmem;
     int availableMem;
-    int gain;           //guadagno totale
-    int *Zi;            //vettore indici attivi
-    int feasible;       //feasible or not
-    int *Yc;            //vettore configurazioni attive
-    int *Fc;            //vettore che indica quanto eventuale Fixed Cost verr� aggiunto aggiungendo la configurazione corrispondente
-    int *eventualMemc;  //vettore che indica quanta eventuale Memoria verr� aggiunta aggiungendo la configurazione corrispondente
-    int *actualMemc;    //costo di memoria attuale delle configurazioni attive
-    int *eventualGainc; //vettore che indica quanto eventuale Guadagno verr� aggiunto aggiungendo la configurazione corrispondente
-    int *actualGainc;   //vettore degli attuali guadagni delle configurazioni attive
+    int gain;
+    int *Zi;
+    int feasible;
+    int *Yc;
+    int *Fc;
+    int *eventualMemc;
+    int *actualMemc;
+    int *eventualGainc;
+    int *actualGainc;
 }Vett;
 
 int numP=50;
 float probOffset=.01;
 int TSiter=50;
-int numN=5;      //dimensione del nighborhood
+int numN=5;
 
 Sol best;
 
@@ -63,30 +63,30 @@ void TSdataInit(Vett *neighbor, Vett *temp, Sol *solu, Sol *TSbest, Instances *i
 void createZi(Vett *v, Instances *in);
 int check3(Vett *v, Instances *in);
 
-void eventualMemCalc(Vett *x, Instances *in);   //calcolo vettore eventualMemc
-void changeFc(Vett *x, Instances *in);          //calcolo vettore Fc
-void changeGainC(Vett *x, Instances *in);       //calcolo vettore actualGainc
-void actualMemCalc(Vett *temp, Instances *in);  //calcolo vettore actualMemc
-void configureC(Vett *x, Instances *in);        //richiama le 4 funzioni precedenti
+void eventualMemCalc(Vett *x, Instances *in);
+void changeFc(Vett *x, Instances *in);
+void changeGainC(Vett *x, Instances *in);
+void actualMemCalc(Vett *temp, Instances *in);
+void configureC(Vett *x, Instances *in);
 
 void calculateOF(Vett *v, Instances *in);
 
-void createYc(Vett *temp, Instances *in);       //crea Yc da vettX
-void createVettXfromYc(Vett *x, Instances *in); //crea vettX da Yc
-void createZifromYc(Vett *v, Instances *in);    //crea Zi da Yc
+void createYc(Vett *temp, Instances *in);
+void createVettXfromYc(Vett *x, Instances *in);
+void createZifromYc(Vett *v, Instances *in);
 
-void eventualGainCalc(Vett *temp, Instances *in);       //calcolo vettore eventualGainc
-int evaluateGain(int c, Vett *temp, Instances *in);     //calcolo elemento vettore eventualGainc
+void eventualGainCalc(Vett *temp, Instances *in);
+int evaluateGain(int c, Vett *temp, Instances *in);
 
-void Vett2Sol(Vett *v, Sol *s, Instances *in);          //da Vett a Sol
-void createSolution(Vett *x, Instances *in);            //richiama le funzioni necessarie per costruire la soluzione a partire da Yc
+void Vett2Sol(Vett *v, Sol *s, Instances *in);
+void createSolution(Vett *x, Instances *in);
 void cpyVett(Vett *v1, Vett *v2, Instances *in);
 
 
 void GAdataInit(Instances *in, Vett *pop, Vett *temp, Vett *selectedParents, Vett *children, Vett *soluz,
                 Vett *neighbor, int **chosen, int **neibest, int **neiworst);
 void GAinit(Vett *pop, Instances *in);
-void searchMax(Vett *pop, int dim, Sol *best, Instances *in);
+void searchMax(Vett *pop, int dim, Sol *best, Instances *in, time_t time);
 void calculateFitness(Vett *v, Instances *in);
 void mutation(Vett *v, Instances *in);
 void selectParents(Vett *pop, Vett *selPar, Instances *in);
@@ -102,16 +102,18 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
 
 DWORD WINAPI Hybrid(Instances *in)
 {
-    int j, c, q, i, iteration=0, Xcount=0;
-    Sol algBest;
+    int j, i, Xcount=0;
+
     Vett population[numP], temp;
     Vett selectedParents[numP/2], children[numP/2];
 
     Vett soluz, neighbor;
     int *chosen, *neibest, *neiworst;
 
+    time_t start=time(NULL);
+
 #if debug == 0
-    srand((unsigned int)time(NULL)); //per aumentare casualità quando non siamo in debug
+    srand((unsigned int)time(NULL));
 #endif
 
     GAdataInit(in, population, &temp, selectedParents, children,
@@ -147,7 +149,7 @@ DWORD WINAPI Hybrid(Instances *in)
     }
 #endif
 
-    searchMax(population, numP, &best, in);
+    searchMax(population, numP, &best, in, time(NULL)-start);
 
     for(i=0; i<numP; i++) {
         calculateFitness(&population[i], in);
@@ -256,12 +258,10 @@ DWORD WINAPI Hybrid(Instances *in)
         }
 #endif
 
-        searchMax(children, numP / 2, &best, in);
+        searchMax(children, numP / 2, &best, in, time(NULL)-start);
 
         sobstitute(population, children, in);
 
-
-        //If no crossover happened, apply mutation over population
         if (Xcount == 0) {
 #if debug >= 2
             printf("\nHYB: NO CROSSOVER -> ONLY MUTATION\n");
@@ -299,7 +299,7 @@ DWORD WINAPI Hybrid(Instances *in)
 
         Xcount = 0;
 
-        searchMax(population, numP, &best, in);
+        searchMax(population, numP, &best, in, 0);
 
     }
 
@@ -317,10 +317,12 @@ DWORD WINAPI TabuSearch(Instances *in)
     int nof=0, fea=0;
     int flag=0;
     int *chosen, *neibest, *neiworst;
-    int tabu[2][8];                     //tabu list: 1 riga corrisponde ad una sostituzione che non pu� essere fatta
+    int tabu[2][8];
+
+    time_t start=time(NULL);
 
 #if debug == 0
-    srand((unsigned int)time(NULL)); //per aumentare casualità quando non siamo in debug
+    srand((unsigned int)time(NULL));
 #endif
 
     TSdataInit(&neighbor, &temp, &soluz, &TSbest, in);
@@ -344,16 +346,16 @@ DWORD WINAPI TabuSearch(Instances *in)
 
         for(i=0; i<numN; i++)
         {
-            neibest[i]=-1;      //memorizza gli indici da cui creare i neighbor: indici migliori non attivi
-            neiworst[i]=-1;     //memorizza gli indici da cui creare i neighbor: indici peggiori attivi
+            neibest[i]=-1;
+            neiworst[i]=-1;
         }
 
-        if(temp.feasible==1)    //cerco una sostituzione che aumenti il guadagno
+        if(temp.feasible==1)
         {
 
             for(c=0; c<in->C; c++)
             {
-                chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
+                chosen[c]=0;
             }
             for(i=0; i<numN; i++)
             {
@@ -364,12 +366,12 @@ DWORD WINAPI TabuSearch(Instances *in)
 
                 for(c=0; c<in->C; c++)
                 {
-                    if(temp.Yc[c]==0 && chosen[c]==0 && bestVal < temp.eventualGainc[c])    //se la configurazione non � attiva e l'eventuale guadagno � il pi� alto memorizza l'indice
+                    if(temp.Yc[c]==0 && chosen[c]==0 && bestVal < temp.eventualGainc[c])
                     {
                         bestVal = temp.eventualGainc[c];
                         bestc=c;
                     }
-                    else if(temp.Yc[c]==1 && chosen[c]==0 && worstVal > temp.actualGainc[c])    //se la configurazione � attiva e il suo attuale guadagno � il peggiore, memorizza l'indice
+                    else if(temp.Yc[c]==1 && chosen[c]==0 && worstVal > temp.actualGainc[c])
                     {
                         worstVal=temp.actualGainc[c];
                         worst=c;
@@ -382,14 +384,14 @@ DWORD WINAPI TabuSearch(Instances *in)
                 chosen[worst]=1;
             }
 
-            for(c=0;c<in->C; c++)    //copia del vettore Yc della prima soluzione sul neighbor
+            for(c=0;c<in->C; c++)
             {
                 neighbor.Yc[c]=temp.Yc[c];
             }
 
             bestVal=-1000000;
 
-            for(i=0; i<numN; i++)   //prova lo scambio tra tutti i possibili indici migliori con tutti gli indici peggiori
+            for(i=0; i<numN; i++)
             {
                 if(neibest[i]!=-1)
                 {
@@ -398,7 +400,7 @@ DWORD WINAPI TabuSearch(Instances *in)
                         flag=1;
                         if(neiworst[j]!=-1)
                         {
-                            for(c=1;c<8;c++)    //cerca se lo scambio � presente nella tabu list
+                            for(c=1;c<8;c++)
                             {
                                 if( (tabu[0][c]==neibest[i] && tabu[1][c]==neiworst[j]) || (tabu[0][c]==neiworst[j] && tabu[1][c]==neibest[i]) )
                                 {
@@ -413,7 +415,7 @@ DWORD WINAPI TabuSearch(Instances *in)
                                 createVettXfromYc(&neighbor, in);
                                 createZi(&neighbor, in);
                                 calculateOF(&neighbor, in);
-                                if(neighbor.gain > bestVal)     //se il gain del neigh � il maggiore salva i 2 indici
+                                if(neighbor.gain > bestVal)
                                 {
                                     bestVal=neighbor.gain;
                                     bestc=neibest[i];
@@ -430,20 +432,19 @@ DWORD WINAPI TabuSearch(Instances *in)
             temp.Yc[bestc]=1;
             temp.Yc[worst]=0;
 
-            //printf("fea %d %d\n", worst, bestc);
             tabu[0][count]=bestc;
             tabu[1][count]=worst;
             nof=0;
             fea++;
 
         }
-        else // cerca la soluzione con memoria minore fin quando non torna feasible. utilizza lo stesso procedimento di prima
+        else
         {
             while(temp.feasible==0)
             {
                 for(c=0; c<in->C; c++)
                 {
-                    chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
+                    chosen[c]=0;
                 }
 
                 for(i=0; i<numN; i++)
@@ -523,14 +524,13 @@ DWORD WINAPI TabuSearch(Instances *in)
 
                 tabu[0][count]=bestc;
                 tabu[1][count]=worst;
-                //printf(" no fea %d %d\n", worst, bestc);
                 nof++;
                 fea=0;
 
                 createZifromYc(&temp, in);
                 check3(&temp, in);
 
-                if(nof>=20)   // se non riesce a tornare feasible dopo C iterazioni, prova a disattivare qualche configurazione
+                if(nof>=20)
                 {
                     nof=0;
                     while(temp.feasible==0)
@@ -551,9 +551,9 @@ DWORD WINAPI TabuSearch(Instances *in)
             }
         }
 
-        createSolution(&temp,in);  //crea la vett dalla Yc calcolata
+        createSolution(&temp,in);
 
-        if(fea>=5)  //se � feasible per 5 volte consecutive, prova a servire una query non servita e di conseguenza attivare una conf
+        if(fea>=5)
         {
 
             for(q=rand()%in->Q, flag=0; temp.vettX[q]==-1 && flag<in->Q; q=rand()%in->Q, flag++);
@@ -571,22 +571,21 @@ DWORD WINAPI TabuSearch(Instances *in)
         }
 
 
-        if( (iteration%50) == 49)       //dopo 50 iterazioni senza trovare soluzioni migliori, reinizializza un'altra soluzione
+        if( (iteration%50) == 49)
         {
             TSinit(&temp, in);
             iteration=0;
             count=0;
         }
 
-        if(temp.gain > TSbest.gain && temp.feasible==1)   //salva la soluzione se � la migliore
+        if(temp.gain > TSbest.gain && temp.feasible==1)
         {
             Vett2Sol(&temp, &TSbest, in);
             cpyVett(&neighbor, &temp, in);
 
-            bestVal=0;
             bestc=0;
 
-            while(bestc>-1) //se ancora possibile attivare configurazioni che aumentano il gain senza raggiungere infeasibility, aggiungile
+            while(bestc>-1)
             {
                 bestc=-1;
                 bestVal=0;
@@ -617,7 +616,7 @@ DWORD WINAPI TabuSearch(Instances *in)
                 Vett2Sol(&neighbor, &best, in);
                 bestWrite(&TSbest, in);
 #if debug >= 1
-                printf("\nTS: gain: %d\nTS: memory: %d\nTS: feasible: %d\n", soluz.gain, soluz.mem, soluz.feasible);
+                printf("\nTS: gain: %d\nTS: memory: %d\nTS: feasible: %d\nTS: time: %ld\n", soluz.gain, soluz.mem, soluz.feasible, time(NULL)-start);
 #endif
             }
 
@@ -638,9 +637,8 @@ DWORD WINAPI TabuSearch(Instances *in)
 }
 
 int main(int argc, char*argv[]) {
-    int i, c, q;
     int t=atoi(argv[3]);
-    DWORD timelimit=(DWORD)t*1000; //da secondi a millisecondi
+    DWORD timelimit=(DWORD)t*1000;
     Instances in;
     FILE *fin;
 
@@ -652,45 +650,32 @@ int main(int argc, char*argv[]) {
     fclose(fin);
 
     best.gain=0;
-    HANDLE thread1 = CreateThread(NULL,//attributo sicurezza
-                                  0,//dimensione stack default
-                                  (LPTHREAD_START_ROUTINE)Hybrid,//funzione thread
-                                  &in,//argomento thread
-                                  0,//flag creazione
-                                  NULL//ritorno thread
-    );
+    HANDLE thread1 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Hybrid, &in, 0, NULL);
 
-    HANDLE thread2 = CreateThread(NULL,//attributo sicurezza
-                                  0,//dimensione stack default
-                                  (LPTHREAD_START_ROUTINE)TabuSearch,//funzione thread
-                                  &in,//argomento thread
-                                  0,//flag creazione
-                                  NULL//ritorno thread
-    );
-    //lettura del file e caricamento della struttura dati->
+    //HANDLE thread2 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)TabuSearch, &in, 0, NULL );
+
     Sleep(timelimit);
-    printf("\nTERMINO THREAD 1\n");
     TerminateThread(thread1, 0);
-    printf("\nTHERMINO THREAD 2\n");
-    TerminateThread(thread2, 0);
-    printf("\nPROGRAMMA TERMINATO\n");
+    //TerminateThread(thread2, 0);
 
+#if debug >= 1
     printf("\nBest solution is:\n");
-    for(c=0; c<in.C; c++)
+    for(int c=0; c<in.C; c++)
     {
-        for(q=0; q<in.Q; q++)
+        for(int q=0; q<in.Q; q++)
         {
             printf("%d ", best.Xcq[c][q]);
         }
         printf("\n");
     }
     printf("\n");
-    for(i=0; i<in.I; i++)
+    for(int i=0; i<in.I; i++)
     {
         printf("%d ", best.Zi[i]);
     }
 
     printf("\ngain: %d\nmemory: %d\nfeasible: %d", best.gain, best.mem, best.feasible);
+#endif
 
     return 0;
 }
@@ -770,7 +755,7 @@ void letturamat(int **m, FILE *fin,int r, int c)
 void TSinit(Vett *pop, Instances *in)
 {
     int i, c, count;
-    int Memory;
+    int Memory=0;
     pop->feasible=-1;
     pop->gain=-1;
 
@@ -825,7 +810,6 @@ void TSinit(Vett *pop, Instances *in)
 
     createSolution(pop, in);
 
-    return;
 }
 
 void TSdataInit(Vett *neighbor, Vett *temp, Sol *solu, Sol *TSbest, Instances *in) {
@@ -868,7 +852,6 @@ void TSdataInit(Vett *neighbor, Vett *temp, Sol *solu, Sol *TSbest, Instances *i
 
     assert( (TSbest->Zi = malloc(in->I*sizeof(int))) !=NULL );
 
-    return;
 }
 void createZi(Vett *v, Instances *in)
 {
@@ -893,8 +876,6 @@ void createZi(Vett *v, Instances *in)
             }
         }
     }
-
-    return;
 }
 
 void eventualMemCalc(Vett *x, Instances *in) {
@@ -912,7 +893,6 @@ void eventualMemCalc(Vett *x, Instances *in) {
             }
         }
     }
-    return;
 }
 
 void changeFc(Vett *x, Instances *in)
@@ -930,7 +910,6 @@ void changeFc(Vett *x, Instances *in)
             }
         }
     }
-    return;
 }
 
 void changeGainC(Vett *x, Instances *in)
@@ -965,8 +944,6 @@ void changeGainC(Vett *x, Instances *in)
             }
         }
     }
-
-    return;
 }
 
 void actualMemCalc(Vett *temp, Instances *in)
@@ -984,7 +961,6 @@ void actualMemCalc(Vett *temp, Instances *in)
             }
         }
     }
-    return;
 }
 void configureC(Vett *x, Instances *in)
 {
@@ -997,7 +973,6 @@ void configureC(Vett *x, Instances *in)
 
     actualMemCalc(x, in);
 
-    return;
 }
 int check3(Vett *v, Instances *in)
 {
@@ -1049,7 +1024,6 @@ void calculateOF(Vett *v, Instances *in)
 
     v->gain = (gain-cost);
 
-    return;
 }
 
 void createYc(Vett *temp, Instances *in)
@@ -1068,8 +1042,6 @@ void createYc(Vett *temp, Instances *in)
             temp->Yc[temp->vettX[q]]=1;
         }
     }
-
-    return;
 }
 
 void createVettXfromYc(Vett *x, Instances *in)
@@ -1098,7 +1070,6 @@ void createVettXfromYc(Vett *x, Instances *in)
             }
         }
     }
-    return;
 }
 
 void createZifromYc(Vett *v, Instances *in)
@@ -1123,8 +1094,6 @@ void createZifromYc(Vett *v, Instances *in)
             }
         }
     }
-
-    return;
 }
 
 void eventualGainCalc(Vett *temp, Instances *in)
@@ -1135,8 +1104,6 @@ void eventualGainCalc(Vett *temp, Instances *in)
     {
         temp->eventualGainc[c]=evaluateGain(c, temp, in);
     }
-
-    return;
 }
 
 int evaluateGain(int c, Vett *temp, Instances *in)
@@ -1164,7 +1131,6 @@ int evaluateGain(int c, Vett *temp, Instances *in)
 
 
 void Vett2Sol(Vett *v, Sol *s, Instances *in)
-// Translate type Vett into type Sol solution
 {
     int c, q, i;
     for(c=0; c<in->C; c++){
@@ -1185,8 +1151,6 @@ void Vett2Sol(Vett *v, Sol *s, Instances *in)
     s->gain = v->gain;
     s->mem = v->mem;
     s->feasible = v->feasible;
-
-    return;
 }
 
 void createSolution(Vett *x, Instances *in)
@@ -1198,7 +1162,6 @@ void createSolution(Vett *x, Instances *in)
     check3(x, in);
     configureC(x, in);
     eventualGainCalc(x, in);
-    return;
 }
 
 void cpyVett(Vett *v1, Vett *v2, Instances *in)
@@ -1210,8 +1173,6 @@ void cpyVett(Vett *v1, Vett *v2, Instances *in)
         v1->Yc[c]=v2->Yc[c];
     }
     createSolution(v1,in);
-
-    return;
 }
 
 void bestWrite(Sol *best, Instances *in)
@@ -1236,7 +1197,6 @@ void bestWrite(Sol *best, Instances *in)
     }
 
     fclose(fout);
-    return;
 }
 void GAdataInit(Instances *in, Vett *pop, Vett *temp, Vett *selectedParents, Vett *children, Vett *soluz,
                 Vett *neighbor, int **chosen, int **neibest, int **neiworst)
@@ -1327,18 +1287,16 @@ void GAdataInit(Instances *in, Vett *pop, Vett *temp, Vett *selectedParents, Vet
 }
 
 void GAinit(Vett *pop, Instances *in)
-// Genetic Algorithm initialization
 {
-    int j=0, i=0,c=0, q=0;
+    int j=0, c=0, q=0;
     int count, Memory, numconf;
     double iteration;
-    int soglia;
 
     for(j=0; j<numP; j++) {
         pop[j].feasible = -1;
         pop[j].gain = -1;
         iteration = 0;
-        soglia = 1;
+
         while ((pop[j].feasible == 0 || pop[j].gain <=  -exp(iteration)) && iteration < 6) //bisogna compilare con l'opzione -lm
         {
 
@@ -1371,7 +1329,7 @@ void GAinit(Vett *pop, Instances *in)
 
                     Memory -= pop[j].confmem[c];
                     createZi(&pop[j], in);
-                    //changeConfMem(&pop[j], in);
+
                     calculateOF(&pop[j], in);
                     calculateC(&pop[j], in);
                     calculateR(&pop[j], in);
@@ -1380,17 +1338,8 @@ void GAinit(Vett *pop, Instances *in)
                     changeFc(&pop[j], in);
                 }
             }
-//            if (iteration > 3) {
-//                printf("inside\n%f %f\n",exp(iteration),iteration);
-//                printf("gain %d\n",pop[j].gain);
-//                printf("feasible %d\n",pop[j].feasible);
-//               printf("\n\n");
-//
-//		}
+
         }
-//        printf("%d\n",iteration);
-//        printf("gain %d\n",pop[j].gain);
-//        printf("feasible %d\n",pop[j].feasible);
 
         pop[j].availableMem = in->M - pop[j].mem;
 
@@ -1419,8 +1368,7 @@ void GAinit(Vett *pop, Instances *in)
     }
 }
 
-void searchMax(Vett *pop, int dim, Sol *best, Instances *in)
-// Scan population for best solution
+void searchMax(Vett *pop, int dim, Sol *best, Instances *in, time_t time)
 {
     int i;
     for(i=0; i<dim; i++)
@@ -1430,11 +1378,10 @@ void searchMax(Vett *pop, int dim, Sol *best, Instances *in)
             Vett2Sol(&pop[i], best, in);
             bestWrite(best,in);
 #if debug >= 1
-            printf("\nHYB: gain: %d\nHYB: memory: %d\nHYB: feasible: %d\n", best->gain, best->mem, best->feasible);
+            printf("\nHYB: gain: %d\nHYB: memory: %d\nHYB: feasible: %d\nHYB: time: %ld\n", best->gain, best->mem, best->feasible, time);
 #endif
         }
     }
-
 }
 
 void calculateFitness(Vett *v, Instances *in)
@@ -1443,9 +1390,6 @@ void calculateFitness(Vett *v, Instances *in)
 }
 
 void mutation(Vett *v, Instances *in)
-//criticità: una conf non serve tutte le query che potrebbe, bisognerebbe dare una passata alla fine per vedere se c'è qualche query non servita con una sua conf attiva
-//il valore soglia è empirico
-//cambiare la soglia quando flag = 1 seconda la memoria disponibile, in generale credo proprio che la soglia vada in base alla mem
 {
     int i, q, c = 0;
     float compatibility, maxCompatibility;
@@ -1455,31 +1399,28 @@ void mutation(Vett *v, Instances *in)
     float rMin;
 
     int flag = 0;
-    float soglia = 0.17; //valore empirico
+    float soglia = 0.17;
 
     int tabu[in->Q];
-    for (int var = 0; var < in->Q; ++var) {
-        tabu[var] = 0;
+    for (q = 0; q < in->Q; ++q) {
+        tabu[q] = 0;
     }
-    while (1) //ne esco dopo aver considerato una e una sola volta tutte le query
+    q = 0;
+    while (1)
     {
         rMin = INT_MAX;
         qMin = -1;
         c = 0;
-        compatibility = 0;
 
         for (q = 0; q < in->Q; q++) {
-            if (((v->vettC[q] != 0) ^ flag) //voglio occuparmi prima delle query con già una config e poi di quelle senza
-                && v->vettC[q] < rMin  //ricerca minimo
-                //&& v->vettC[q] < soglia //se voglio escludere di cambiare le q con una compatibilità > soglia
-                && tabu[q] != 1) //voglio fare un solo giro di vettX
+            if (((v->vettC[q] != 0) ^ flag) && v->vettC[q] < rMin  && tabu[q] != 1)
             {
                 qMin = q;
                 rMin = v->vettC[q];
             }
         }
 
-        if (qMin == -1) // mi permette di occuparmi prima delle query già servite da una config e poi delle altre
+        if (qMin == -1)
         {
             if (flag == 1)
                 break;
@@ -1488,9 +1429,9 @@ void mutation(Vett *v, Instances *in)
             tabu[qMin] = 1;
             cMax = -1;
             maxCompatibility = 0;
-            while (c < in->C) //mi guardo tutte le configurazioni che con questa query mi danno gain positivo alla ricerca di quella con compatibilità max
+            while (c < in->C)
             {
-                if (in->Gcq[c][qMin] > 0) //calcolo conf con compatibilità max
+                if (in->Gcq[c][qMin] > 0)
                 {
                     divisore = 0;
                     compatibility = 0;
@@ -1510,8 +1451,7 @@ void mutation(Vett *v, Instances *in)
                 }
                 c++;
             }
-            //printf("max %f\n", maxCompatibility);
-            if (flag == 1) //soglia per le query che non erano ancora servite, più alta per non aggiurne troppe e andare fuori con la memoria (sarebbe bello decidere in base a quanta memoria mi rimane a disp)
+            if (flag == 1)
             {
                 soglia = 0.21;
             }
@@ -1560,7 +1500,6 @@ void mutation(Vett *v, Instances *in)
 }
 
 void selectParents(Vett *pop, Vett *selPar, Instances *in)
-// Select parents with fitness based probability
 {
     int i;
     double sumFitness=0, prob, val;
@@ -1583,7 +1522,6 @@ void selectParents(Vett *pop, Vett *selPar, Instances *in)
 }
 
 void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in)
-//scorro i due vettori contemporaneamente nei due sensi. Appena uno dei due prevarica l'altro in fatto di gain offerto scelgo quello come punto di taglio
 {
     int q;
     int x = (rand() % (in->Q - 1)) + 1;
@@ -1623,7 +1561,6 @@ void crossover(Vett *p1, Vett *p2, Vett *c1, Vett *c2, Instances *in)
 }
 
 void sobstitute(Vett *pop, Vett *children, Instances *in)
-// Substitute parents with children fitness based probability
 {
     int i;
     double sumFitness=0, prob, val;
@@ -1642,7 +1579,6 @@ void sobstitute(Vett *pop, Vett *children, Instances *in)
 }
 
 void calculateC(Vett *v, Instances *in)
-// Calculates vettC from vettX - compatibility based: guardo quanti indici attivi ha in comune la configurazione con Zi corrente
 {
     int q, i;
     float compatibility;
@@ -1668,7 +1604,6 @@ void calculateC(Vett *v, Instances *in)
 }
 
 void calculateR(Vett *v, Instances *in)
-// Calculates vettR from vettX
 {
     int q, i;
     int sum;
@@ -1688,7 +1623,6 @@ void calculateR(Vett *v, Instances *in)
 }
 
 void cpySol(Vett *dst, Vett *src, Instances *in)
-// Copy solution from src to dst
 {
     int i;
 
@@ -1745,7 +1679,7 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
     int bestVal, worstVal;
     int nof=0, fea=0;
     int flag=0;
-    int tabu[2][8];                     //tabu list: 1 riga corrisponde ad una sostituzione che non pu� essere fatta
+    int tabu[2][8];
 
     cpySol(temp, localBest, in);
     cpySol(soluz, localBest, in);
@@ -1774,16 +1708,16 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
 
         for(i=0; i<numN; i++)
         {
-            neibest[i]=-1;      //memorizza gli indici da cui creare i neighbor: indici migliori non attivi
-            neiworst[i]=-1;     //memorizza gli indici da cui creare i neighbor: indici peggiori attivi
+            neibest[i]=-1;
+            neiworst[i]=-1;
         }
 
-        if(temp->feasible==1)    //cerco una sostituzione che aumenti il guadagno
+        if(temp->feasible==1)
         {
 
             for(c=0; c<in->C; c++)
             {
-                chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
+                chosen[c]=0;
             }
             for(i=0; i<numN; i++)
             {
@@ -1794,12 +1728,12 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
 
                 for(c=0; c<in->C; c++)
                 {
-                    if(temp->Yc[c]==0 && chosen[c]==0 && bestVal < temp->eventualGainc[c])    //se la configurazione non � attiva e l'eventuale guadagno � il pi� alto memorizza l'indice
+                    if(temp->Yc[c]==0 && chosen[c]==0 && bestVal < temp->eventualGainc[c])
                     {
                         bestVal = temp->eventualGainc[c];
                         bestc=c;
                     }
-                    else if(temp->Yc[c]==1 && chosen[c]==0 && worstVal > temp->actualGainc[c])    //se la configurazione � attiva e il suo attuale guadagno � il peggiore, memorizza l'indice
+                    else if(temp->Yc[c]==1 && chosen[c]==0 && worstVal > temp->actualGainc[c])
                     {
                         worstVal=temp->actualGainc[c];
                         worst=c;
@@ -1812,14 +1746,14 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
                 chosen[worst]=1;
             }
 
-            for(c=0;c<in->C; c++)    //copia del vettore Yc della prima soluzione sul neighbor
+            for(c=0;c<in->C; c++)
             {
                 neighbor->Yc[c]=temp->Yc[c];
             }
 
             bestVal=-1000000;
 
-            for(i=0; i<numN; i++)   //prova lo scambio tra tutti i possibili indici migliori con tutti gli indici peggiori
+            for(i=0; i<numN; i++)
             {
                 if(neibest[i]!=-1)
                 {
@@ -1828,7 +1762,7 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
                         flag=1;
                         if(neiworst[j]!=-1)
                         {
-                            for(c=1;c<8;c++)    //cerca se lo scambio � presente nella tabu list
+                            for(c=1;c<8;c++)
                             {
                                 if( (tabu[0][c]==neibest[i] && tabu[1][c]==neiworst[j]) || (tabu[0][c]==neiworst[j] && tabu[1][c]==neibest[i]) )
                                 {
@@ -1843,7 +1777,7 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
                                 createVettXfromYc(neighbor, in);
                                 createZi(neighbor, in);
                                 calculateOF(neighbor, in);
-                                if(neighbor->gain > bestVal)     //se il gain del neigh � il maggiore salva i 2 indici
+                                if(neighbor->gain > bestVal)
                                 {
                                     bestVal=neighbor->gain;
                                     bestc=neibest[i];
@@ -1860,20 +1794,19 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
             temp->Yc[bestc]=1;
             temp->Yc[worst]=0;
 
-            //printf("fea %d %d\n", worst, bestc);
             tabu[0][count]=bestc;
             tabu[1][count]=worst;
             nof=0;
             fea++;
 
         }
-        else // cerca la soluzione con memoria minore fin quando non torna feasible. utilizza lo stesso procedimento di prima
+        else
         {
             while(temp->feasible==0)
             {
                 for(c=0; c<in->C; c++)
                 {
-                    chosen[c]=0;    //il vettore chosen terr� conto delle c che sono gi� state prese in considerazione
+                    chosen[c]=0;
                 }
 
                 for(i=0; i<numN; i++)
@@ -1934,7 +1867,7 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
                                     createVettXfromYc(neighbor, in);
                                     createZi(neighbor, in);
                                     calculateOF(neighbor, in);
-                                    if(neighbor->gain > bestVal)     //se il gain del neigh � il maggiore salva i 2 indici
+                                    if(neighbor->gain > bestVal)
                                     {
                                         bestVal=neighbor->gain;
                                         bestc=neibest[i];
@@ -1953,14 +1886,13 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
 
                 tabu[0][count]=bestc;
                 tabu[1][count]=worst;
-                //printf(" no fea %d %d\n", worst, bestc);
                 nof++;
                 fea=0;
 
                 createZifromYc(temp, in);
                 check3(temp, in);
 
-                if(nof>=20)   // se non riesce a tornare feasible dopo C iterazioni, prova a disattivare qualche configurazione
+                if(nof>=20)
                 {
                     nof=0;
                     while(temp->feasible==0)
@@ -1980,9 +1912,9 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
             }
         }
 
-        createSolution(temp,in);  //crea la vett dalla Yc calcolata
+        createSolution(temp,in);
 
-        if(fea>=5)  //se � feasible per 5 volte consecutive, prova a servire una query non servita e di conseguenza attivare una conf
+        if(fea>=5)
         {
 
             for(q=rand()%in->Q, flag=0; temp->vettX[q]==-1 && flag<in->Q; q=rand()%in->Q, flag++);
@@ -1995,19 +1927,19 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
                     flag=in->C;
                 }
             }
-            //changed[c]=count;
+
             createSolution(temp,in);
             fea=0;
         }
 
-        if(temp->gain > localBest->gain && temp->feasible==1)   //salva la soluzione se � la migliore
+        if(temp->gain > localBest->gain && temp->feasible==1)
         {
             cpySol(neighbor, temp, in);
 
             bestVal = 0;
             bestc = 0;
 
-            while(bestc>-1) //se ancora possibile attivare configurazioni che aumentano il gain senza raggiungere infeasibility, aggiungile
+            while(bestc>-1)
             {
                 bestc = -1;
                 bestVal = 0;
@@ -2043,8 +1975,6 @@ void TS(Vett *localBest, Vett *temp, Vett *soluz, Vett *neighbor, int *chosen, i
     }
 }
 
-// Returns filename portion of the given path
-// Returns empty string if path is directory
 char *GetFileName(const char *path)
 {
     char *filename = strrchr(path, '\\');

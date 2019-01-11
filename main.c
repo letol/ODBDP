@@ -652,11 +652,11 @@ int main(int argc, char*argv[]) {
     best.gain=0;
     HANDLE thread1 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Hybrid, &in, 0, NULL);
 
-    //HANDLE thread2 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)TabuSearch, &in, 0, NULL );
+    HANDLE thread2 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)TabuSearch, &in, 0, NULL );
 
     Sleep(timelimit);
     TerminateThread(thread1, 0);
-    //TerminateThread(thread2, 0);
+    TerminateThread(thread2, 0);
 
 #if debug >= 1
     printf("\nBest solution is:\n");
